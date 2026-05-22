@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@import "./styles/litenote-tokens.css";
+
+/* 窗口圆角：与 --ln-radius-window 一致，裁剪 WebView */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background-color: transparent;
+  border-radius: var(--ln-radius-window);
+  overflow: hidden;
+  outline: none;
+}
+
+/* 独立说明 / 设置窗口：系统标题栏 + 白底客户区 */
+html.ln-help,
+html.ln-help body,
+html.ln-help #root,
+html.ln-settings,
+html.ln-settings body,
+html.ln-settings #root {
+  border-radius: 0;
+  background-color: #ffffff;
+}
+
+body {
+  font-family: var(--ln-font-stack);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* 透明无边框窗口：顶栏等区域拖曳（与 data-tauri-drag-region 叠加，改善 Windows WebView2） */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+[data-tauri-no-drag] {
+  -webkit-app-region: no-drag;
+}

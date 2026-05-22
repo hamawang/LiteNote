@@ -1,0 +1,48 @@
+/**
+ * 轻签（LiteNote）設計權杖 — 色彩、字體、圓角與動效
+ */
+:root {
+  --ln-ink: #1a1a1a;
+  --ln-cloud: #ffffff;
+  --ln-mist: #f5f5f7;
+  --ln-silver: #8e8e93;
+
+  /* 待办重要程度基色（黄 / 橙 / 红），由下方 --ln-todo-p-* 引用；其余优先级色已不在界面使用 */
+  --ln-p0: #ff3b30;
+  --ln-p1: #ff9500;
+  --ln-p2: #ffcc00;
+
+  /**
+   * 待办「重要程度」色（与 TodoColorId 一一对应，由低到高）
+   * default → 普通；yellow → 注意（黄）；cyan → 重要（橙）；pink → 紧急（红）
+   * none：圆点/菜单在白底上可见；none-ink：列表正文在玻璃上保持高对比
+   */
+  --ln-todo-p-none: #cbd5e1;
+  --ln-todo-p-none-ink: rgba(255, 255, 255, 0.94);
+  --ln-todo-p-attention: var(--ln-p2);
+  --ln-todo-p-important: var(--ln-p1);
+  --ln-todo-p-urgent: var(--ln-p0);
+
+  --ln-modal-scrim: rgba(0, 0, 0, 0.4);
+  --ln-shadow-card: 0 4px 20px rgba(0, 0, 0, 0.08);
+
+  --ln-radius-card: 12px;
+  --ln-radius-item: 8px;
+  /** 窗口 / WebView 根结点圆角（略小于原 16px） */
+  --ln-radius-window: 5px;
+
+  --ln-font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+  --ln-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ln-duration-item: 200ms;
+  --ln-duration-window: 250ms;
+
+  /* 蓝玻璃小部件（SRS v2） */
+  --ln-glass-blur: 20px;
+  --ln-glass-bg: linear-gradient(
+    180deg,
+    rgba(95, 165, 205, 0.78) 0%,
+    rgba(45, 105, 145, 0.88) 100%
+  );
+}
