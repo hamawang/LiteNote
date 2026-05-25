@@ -3,15 +3,19 @@ import { getDb } from "@/lib/db";
 /** 是否启用截止时间提醒 */
 const ENABLE_REMINDER = true;
 
+/** 提前提醒量（毫秒），默认 15 分钟 */
+const REMIND_ADVANCE_MS = 15 * 60 * 1000;
+
 let _polling = false;
 
 /**
  * 启动截止时间提醒轮询。
  *
- * 每 30 秒扫描一次 todos 表，找到 `due_date > 0 且 due_date <= now`
+ * 每 30 秒扫描一次 todos 表，找到截止时间在提醒窗口内（提前15分钟）
  * 且 `reminded = 0` 的待办，发送系统通知后标记为已提醒。
  *
  * 调用时机：App 初始化完成后。
+ * 注意：Rust 端有独立的后台提醒轮询作为主力，此前端轮询作为双保险。
  */
 export function startReminderPoll(): void {
   if (!ENABLE_REMINDER) return;
@@ -24,6 +28,7 @@ export function startReminderPoll(): void {
     try {
       const db = await getDb();
       const now = Date.now();
+      const threshold = now + REMIND_ADVANCE_MS;
 
       const rows = await db.select<
         Array<{
@@ -32,8 +37,8 @@ export function startReminderPoll(): void {
           due_date: number;
         }>
       >(
-        "SELECT id, text, due_date FROM todos WHERE due_date > 0 AND due_date <= $1 AND reminded = 0",
-        [now],
+        "SELECT id, text, due_date FROM todos WHERE due_date > 0 AND due_date - $1 <= $2 AND reminded = 0",
+        [REMIND_ADVANCE_MS, threshold],
       );
 
       if (rows.length === 0) return;

@@ -4,6 +4,7 @@ import { t } from "@/i18n";
 import { COLOR_DOT_STYLE } from "@/lib/itemColors";
 import { formatDueDate } from "@/lib/dueDate";
 import type { TodoItem } from "@/types/todo";
+import { useNow } from "@/hooks/useNow";
 
 interface TodoRowProps {
   todo: TodoItem;
@@ -31,9 +32,12 @@ export function TodoRow({
   const accent = COLOR_DOT_STYLE[todo.colorId].background;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // 每分钟刷新当前时间戳，确保逾期状态能自动更新
+  const now = useNow(60_000);
+
   const dueLabel = useMemo(
     () => formatDueDate(todo.dueDate, locale === "en" ? "en" : "zh-CN"),
-    [todo.dueDate, locale],
+    [todo.dueDate, locale, now],
   );
 
   // 进入编辑态时，光标定位到文本末尾
