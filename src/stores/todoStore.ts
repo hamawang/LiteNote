@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { TodoItem } from "@/types/todo";
+import type { TodoItem, RecurrenceType } from "@/types/todo";
 import {
   loadTodos,
   insertTodo,
@@ -29,6 +29,14 @@ export interface TodoStoreActions {
   toggleCompleted: (id: string) => void;
   setTodoColor: (id: string, colorId: TodoItem["colorId"]) => void;
   setTodoDueDate: (id: string, dueDate: number) => void;
+  setTodoRecurrence: (
+    id: string,
+    isRecurring: boolean,
+    type: RecurrenceType,
+    config: string,
+  ) => void;
+  /** 直接更新一条 todo（用于自动推进循环时间等场景） */
+  updateTodoDirect: (id: string, dueDate: number) => void;
   clearError: () => void;
 }
 
@@ -83,6 +91,9 @@ export const useTodoStore = create<TodoStoreState & TodoStoreActions>()(
         updateTime: now,
         dueDate: 0,
         reminded: false,
+        isRecurring: false,
+        recurrenceType: "none",
+        recurrenceConfig: "",
       };
       set((s) => ({ todos: [...s.todos, item] }));
       dbWrite(
@@ -207,6 +218,59 @@ export const useTodoStore = create<TodoStoreState & TodoStoreActions>()(
         dbWrite(
           updateTodo(updated),
           "setTodoDueDate",
+          (msg) => set({ lastError: msg }),
+        );
+      }
+    },
+
+    setTodoRecurrence: (id, isRecurring, type, config) => {
+      const now = Date.now();
+      let updated!: TodoItem;
+      set((s) => ({
+        todos: s.todos.map((x) =>
+          x.id === id
+            ? ((updated = {
+                ...x,
+                isRecurring,
+                recurrenceType: type,
+                recurrenceConfig: config,
+                // 设为循环时重置 reminded，确保新轮次能提醒
+                reminded: isRecurring ? false : x.reminded,
+                updateTime: now,
+              }),
+              updated)
+            : x,
+        ),
+      }));
+      if (updated) {
+        dbWrite(
+          updateTodo(updated),
+          "setTodoRecurrence",
+          (msg) => set({ lastError: msg }),
+        );
+      }
+    },
+
+    updateTodoDirect: (id, dueDate) => {
+      const now = Date.now();
+      let updated!: TodoItem;
+      set((s) => ({
+        todos: s.todos.map((x) =>
+          x.id === id
+            ? ((updated = {
+                ...x,
+                dueDate,
+                reminded: false,
+                updateTime: now,
+              }),
+              updated)
+            : x,
+        ),
+      }));
+      if (updated) {
+        dbWrite(
+          updateTodo(updated),
+          "updateTodoDirect",
           (msg) => set({ lastError: msg }),
         );
       }

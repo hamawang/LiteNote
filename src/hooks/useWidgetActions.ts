@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import type { TodoColorId } from "@/types/todo";
+import type { TodoColorId, RecurrenceType } from "@/types/todo";
 import { useTodoStore } from "@/stores/todoStore";
+
+interface RecurrencePickerState {
+  todoId: string;
+  type: RecurrenceType;
+}
 
 /**
  * WidgetShell 业务逻辑 hook。
@@ -17,6 +22,7 @@ export function useWidgetActions() {
   const toggleCompleted = useTodoStore((s) => s.toggleCompleted);
   const setTodoColor = useTodoStore((s) => s.setTodoColor);
   const setTodoDueDate = useTodoStore((s) => s.setTodoDueDate);
+  const setTodoRecurrence = useTodoStore((s) => s.setTodoRecurrence);
   const commitTodoEdit = useTodoStore((s) => s.commitTodoEdit);
 
   // ── 本地 UI 状态 ──
@@ -26,6 +32,7 @@ export function useWidgetActions() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [dueDatePickerFor, setDueDatePickerFor] = useState<string | null>(null);
+  const [recurrencePicker, setRecurrencePicker] = useState<RecurrencePickerState | null>(null);
 
   // ── 派生数据 ──
   const menuTodo = useMemo(
@@ -80,6 +87,18 @@ export function useWidgetActions() {
     setMenu(null);
   }, [confirmDeleteId, deleteTodo, selectedId]);
 
+  const handleRecurrenceConfirm = useCallback(
+    (type: RecurrenceType, config: string, dueDate: number) => {
+      if (recurrencePicker) {
+        setTodoDueDate(recurrencePicker.todoId, dueDate);
+        setTodoRecurrence(recurrencePicker.todoId, true, type, config);
+      }
+      setRecurrencePicker(null);
+      setMenu(null);
+    },
+    [recurrencePicker, setTodoDueDate, setTodoRecurrence],
+  );
+
   const menuActions = useMemo(
     () => ({
       onPin: () => menuTodo && togglePinned(menuTodo.id),
@@ -96,8 +115,19 @@ export function useWidgetActions() {
         if (menuTodo) setDueDatePickerFor(menuTodo.id);
       },
       onClearDueDate: () => menuTodo && setTodoDueDate(menuTodo.id, 0),
+      onSetRecurrence: (type: RecurrenceType) => {
+        if (!menuTodo) return;
+        // 关闭右键菜单，打开循环规则弹窗
+        setMenu(null);
+        setRecurrencePicker({ todoId: menuTodo.id, type });
+      },
+      onClearRecurrence: () => {
+        if (!menuTodo) return;
+        setTodoRecurrence(menuTodo.id, false, "none", "");
+        setTodoDueDate(menuTodo.id, 0);
+      },
     }),
-    [menuTodo, togglePinned, toggleCompleted, setTodoColor, setTodoDueDate],
+    [menuTodo, togglePinned, toggleCompleted, setTodoColor, setTodoDueDate, setTodoRecurrence],
   );
 
   return {
@@ -112,6 +142,7 @@ export function useWidgetActions() {
     confirmClear,
     confirmDeleteId,
     dueDatePickerFor,
+    recurrencePicker,
     // 设置器
     setMenu,
     setConfirmClear,
@@ -130,6 +161,8 @@ export function useWidgetActions() {
       setDueDatePickerFor(null);
     },
     handleDueDateCancel: () => setDueDatePickerFor(null),
+    handleRecurrenceConfirm,
+    handleRecurrenceCancel: () => setRecurrencePicker(null),
     updateTodoText,
     toggleCompleted,
     menuActions,

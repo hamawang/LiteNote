@@ -4,7 +4,7 @@ import type { MessageKey } from "@/i18n/messages";
 import { t } from "@/i18n";
 import { TODO_COLOR_IMPORTANCE_ORDER, TODO_COLOR_CSS_VAR } from "@/lib/todoImportanceColors";
 import { todayEnd, tomorrowEnd, weekendEnd, formatDueDate } from "@/lib/dueDate";
-import type { TodoColorId } from "@/types/todo";
+import type { TodoColorId, RecurrenceType } from "@/types/todo";
 
 const COLOR_TITLE_KEY: Record<TodoColorId, MessageKey> = {
   none: "colorPriorityNone",
@@ -13,6 +13,15 @@ const COLOR_TITLE_KEY: Record<TodoColorId, MessageKey> = {
   urgent: "colorPriorityUrgent",
 };
 
+const RECURRENCE_LABELS: Array<{
+  type: RecurrenceType;
+  key: MessageKey;
+}> = [
+  { type: "daily", key: "recurDaily" },
+  { type: "weekly", key: "recurWeekly" },
+  { type: "monthly", key: "recurMonthly" },
+];
+
 interface TodoContextMenuProps {
   locale: Locale;
   x: number;
@@ -20,6 +29,7 @@ interface TodoContextMenuProps {
   completed: boolean;
   pinned: boolean;
   dueDate: number;
+  isRecurring: boolean;
   onClose: () => void;
   onPin: () => void;
   onDelete: () => void;
@@ -28,6 +38,8 @@ interface TodoContextMenuProps {
   onPickDueDate: (ts: number) => void;
   onOpenCustomDueDate: () => void;
   onClearDueDate: () => void;
+  onSetRecurrence: (type: RecurrenceType) => void;
+  onClearRecurrence: () => void;
 }
 
 export function TodoContextMenu({
@@ -37,6 +49,7 @@ export function TodoContextMenu({
   completed,
   pinned,
   dueDate,
+  isRecurring,
   onClose,
   onPin,
   onDelete,
@@ -45,6 +58,8 @@ export function TodoContextMenu({
   onPickDueDate,
   onOpenCustomDueDate,
   onClearDueDate,
+  onSetRecurrence,
+  onClearRecurrence,
 }: TodoContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -77,7 +92,7 @@ export function TodoContextMenu({
       className="fixed z-[150] min-w-[10rem] rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
       style={{
         left: Math.min(x, window.innerWidth - 220),
-        top: Math.min(y, window.innerHeight - 340),
+        top: Math.min(y, window.innerHeight - 420),
       }}
       role="menu"
     >
@@ -117,79 +132,123 @@ export function TodoContextMenu({
       </div>
 
       {!completed ? (
-        <div className="border-t border-neutral-100 py-1">
-          <div className="flex items-center justify-between px-3 py-1">
-            <span className="text-xs text-neutral-500">{mk("menuDueDate")}</span>
-            {dueLabel ? (
-              <span className="text-xs text-sky-600">{dueLabel}</span>
+        <>
+          {/* 截止时间：循环待办不显示（时间已由循环规则确定） */}
+          {!isRecurring ? (
+            <div className="border-t border-neutral-100 py-1">
+              <div className="flex items-center justify-between px-3 py-1">
+                <span className="text-xs text-neutral-500">{mk("menuDueDate")}</span>
+                {dueLabel ? (
+                  <span className="text-xs text-sky-600">{dueLabel}</span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-1.5 px-2 pb-1">
+                <button
+                  type="button"
+                  className={quickBtn}
+                  onClick={() => {
+                    onPickDueDate(todayEnd());
+                    onClose();
+                  }}
+                >
+                  {mk("dueToday")}
+                </button>
+                <button
+                  type="button"
+                  className={quickBtn}
+                  onClick={() => {
+                    onPickDueDate(tomorrowEnd());
+                    onClose();
+                  }}
+                >
+                  {mk("dueTomorrow")}
+                </button>
+                <button
+                  type="button"
+                  className={quickBtn}
+                  onClick={() => {
+                    onPickDueDate(weekendEnd());
+                    onClose();
+                  }}
+                >
+                  {mk("dueWeekend")}
+                </button>
+              </div>
+              <button
+                type="button"
+                className={item}
+                role="menuitem"
+                onClick={() => {
+                  onOpenCustomDueDate();
+                  onClose();
+                }}
+              >
+                {mk("dueCustom")}
+              </button>
+              {dueDate > 0 ? (
+                <button
+                  type="button"
+                  className={item}
+                  role="menuitem"
+                  onClick={() => {
+                    onClearDueDate();
+                    onClose();
+                  }}
+                >
+                  {mk("dueClear")}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* 循环规则 */}
+          <div className="border-t border-neutral-100 py-1">
+            <div className="px-3 py-1 text-xs text-neutral-500">{mk("menuRecurrence")}</div>
+            <div className="flex items-center gap-1.5 px-2 pb-1">
+              {RECURRENCE_LABELS.map(({ type }) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`${quickBtn} ${
+                    isRecurring && type === "daily"
+                      ? "bg-sky-100 border-sky-300 text-sky-700"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    onSetRecurrence(type);
+                    onClose();
+                  }}
+                >
+                  {mk(`recur${type.charAt(0).toUpperCase() + type.slice(1)}` as MessageKey)}
+                </button>
+              ))}
+            </div>
+            {isRecurring ? (
+              <button
+                type="button"
+                className={item}
+                role="menuitem"
+                onClick={() => {
+                  onClearRecurrence();
+                  onClose();
+                }}
+              >
+                {mk("recurClear")}
+              </button>
             ) : null}
           </div>
-          <div className="flex items-center gap-1.5 px-2 pb-1">
-            <button
-              type="button"
-              className={quickBtn}
-              onClick={() => {
-                onPickDueDate(todayEnd());
-                onClose();
-              }}
-            >
-              {mk("dueToday")}
-            </button>
-            <button
-              type="button"
-              className={quickBtn}
-              onClick={() => {
-                onPickDueDate(tomorrowEnd());
-                onClose();
-              }}
-            >
-              {mk("dueTomorrow")}
-            </button>
-            <button
-              type="button"
-              className={quickBtn}
-              onClick={() => {
-                onPickDueDate(weekendEnd());
-                onClose();
-              }}
-            >
-              {mk("dueWeekend")}
-            </button>
-          </div>
-          <button
-            type="button"
-            className={item}
-            role="menuitem"
-            onClick={() => {
-              onOpenCustomDueDate();
-              onClose();
-            }}
-          >
-            {mk("dueCustom")}
-          </button>
-          {dueDate > 0 ? (
-            <button
-              type="button"
-              className={item}
-              role="menuitem"
-              onClick={() => {
-                onClearDueDate();
-                onClose();
-              }}
-            >
-              {mk("dueClear")}
-            </button>
-          ) : null}
-        </div>
+        </>
       ) : null}
 
       <div className="border-t border-neutral-100">
         <button type="button" className={item} role="menuitem" onClick={() => { onDelete(); onClose(); }}>
           {mk("menuDelete")}
         </button>
-        <button type="button" className={item} role="menuitem" onClick={() => { onToggleDone(); onClose(); }}>
-          {completed ? mk("menuUndone") : mk("menuDone")}
-        </button>
+        {!isRecurring ? (
+          <button type="button" className={item} role="menuitem" onClick={() => { onToggleDone(); onClose(); }}>
+            {completed ? mk("menuUndone") : mk("menuDone")}
+          </button>
+        ) : null}
       </div>
     </div>
   );

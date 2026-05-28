@@ -52,16 +52,19 @@ export function isDbAvailable(): boolean {
  * 新增字段时追加一项即可，老用户启动时会自动 ALTER TABLE ADD COLUMN 补上。
  */
 const EXPECTED_TODO_COLUMNS: Array<{ name: string; def: string }> = [
-  { name: "id",          def: "TEXT PRIMARY KEY" },
-  { name: "text",        def: "TEXT NOT NULL DEFAULT ''" },
-  { name: "color_id",    def: "TEXT NOT NULL DEFAULT 'none'" },
-  { name: "pinned",      def: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "completed",   def: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "sort_order",  def: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "create_time", def: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "update_time", def: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "due_date",    def: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "reminded",    def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "id",           def: "TEXT PRIMARY KEY" },
+  { name: "text",         def: "TEXT NOT NULL DEFAULT ''" },
+  { name: "color_id",     def: "TEXT NOT NULL DEFAULT 'none'" },
+  { name: "pinned",       def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "completed",    def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "sort_order",   def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "create_time",  def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "update_time",  def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "due_date",     def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "reminded",     def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "is_recurring", def: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "recurrence_type", def: "TEXT NOT NULL DEFAULT 'none'" },
+  { name: "recurrence_config", def: "TEXT NOT NULL DEFAULT ''" },
 ];
 
 async function initTables(db: Database): Promise<void> {
@@ -128,6 +131,9 @@ export async function loadTodos(): Promise<TodoItem[]> {
       update_time: number;
       due_date: number;
       reminded: number;
+      is_recurring: number;
+      recurrence_type: string;
+      recurrence_config: string;
     }>
   >("SELECT * FROM todos ORDER BY sort_order ASC, update_time DESC");
   return rows.map((r) => ({
@@ -141,14 +147,17 @@ export async function loadTodos(): Promise<TodoItem[]> {
     updateTime: r.update_time,
     dueDate: r.due_date ?? 0,
     reminded: !!(r.reminded ?? 0),
+    isRecurring: !!(r.is_recurring ?? 0),
+    recurrenceType: (r.recurrence_type ?? "none") as TodoItem["recurrenceType"],
+    recurrenceConfig: r.recurrence_config ?? "",
   }));
 }
 
 export async function insertTodo(item: TodoItem): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO todos (id,text,color_id,pinned,completed,sort_order,create_time,update_time,due_date,reminded)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    `INSERT INTO todos (id,text,color_id,pinned,completed,sort_order,create_time,update_time,due_date,reminded,is_recurring,recurrence_type,recurrence_config)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
     [
       item.id,
       item.text,
@@ -160,6 +169,9 @@ export async function insertTodo(item: TodoItem): Promise<void> {
       item.updateTime,
       item.dueDate,
       item.reminded ? 1 : 0,
+      item.isRecurring ? 1 : 0,
+      item.recurrenceType,
+      item.recurrenceConfig,
     ],
   );
 }
@@ -167,7 +179,7 @@ export async function insertTodo(item: TodoItem): Promise<void> {
 export async function updateTodo(item: TodoItem): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE todos SET text=$2,color_id=$3,pinned=$4,completed=$5,sort_order=$6,update_time=$7,due_date=$8,reminded=$9 WHERE id=$1`,
+    `UPDATE todos SET text=$2,color_id=$3,pinned=$4,completed=$5,sort_order=$6,update_time=$7,due_date=$8,reminded=$9,is_recurring=$10,recurrence_type=$11,recurrence_config=$12 WHERE id=$1`,
     [
       item.id,
       item.text,
@@ -178,6 +190,9 @@ export async function updateTodo(item: TodoItem): Promise<void> {
       item.updateTime,
       item.dueDate,
       item.reminded ? 1 : 0,
+      item.isRecurring ? 1 : 0,
+      item.recurrenceType,
+      item.recurrenceConfig,
     ],
   );
 }

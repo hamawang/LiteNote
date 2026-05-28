@@ -12,6 +12,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { DueDatePicker } from "./DueDatePicker";
 import { FooterBar } from "./FooterBar";
 import { HeaderBar } from "./HeaderBar";
+import { RecurrencePicker } from "./RecurrencePicker";
 import { TodoContextMenu } from "./TodoContextMenu";
 import { TodoList } from "./TodoList";
 
@@ -55,6 +56,7 @@ export function WidgetShell() {
     confirmClear,
     confirmDeleteId,
     dueDatePickerFor,
+    recurrencePicker,
     setMenu,
     setConfirmClear,
     setConfirmDeleteId,
@@ -66,6 +68,8 @@ export function WidgetShell() {
     handleDeleteOne,
     handleDueDateConfirm,
     handleDueDateCancel,
+    handleRecurrenceConfirm,
+    handleRecurrenceCancel,
     updateTodoText,
     toggleCompleted,
     menuActions,
@@ -163,6 +167,7 @@ export function WidgetShell() {
           completed={menuTodo.completed}
           pinned={menuTodo.pinned}
           dueDate={menuTodo.dueDate}
+          isRecurring={menuTodo.isRecurring}
           onClose={() => setMenu(null)}
           onPin={menuActions.onPin}
           onDelete={menuActions.onDelete}
@@ -171,6 +176,8 @@ export function WidgetShell() {
           onPickDueDate={menuActions.onPickDueDate}
           onOpenCustomDueDate={menuActions.onOpenCustomDueDate}
           onClearDueDate={menuActions.onClearDueDate}
+          onSetRecurrence={menuActions.onSetRecurrence}
+          onClearRecurrence={menuActions.onClearRecurrence}
         />
       ) : null}
 
@@ -179,6 +186,14 @@ export function WidgetShell() {
         open={dueDatePickerFor !== null}
         onConfirm={handleDueDateConfirm}
         onCancel={handleDueDateCancel}
+      />
+
+      <RecurrencePicker
+        locale={locale}
+        open={recurrencePicker !== null}
+        recurrenceType={recurrencePicker?.type ?? "none"}
+        onConfirm={handleRecurrenceConfirm}
+        onCancel={handleRecurrenceCancel}
       />
 
       <ConfirmDialog

@@ -7,6 +7,19 @@ export const TODO_COLOR_IDS = [
 
 export type TodoColorId = (typeof TODO_COLOR_IDS)[number];
 
+export const RECURRENCE_TYPES = ["none", "daily", "weekly", "monthly"] as const;
+export type RecurrenceType = (typeof RECURRENCE_TYPES)[number];
+
+/** 循环规则配置 */
+export interface RecurrenceConfig {
+  /** 间隔数，如 2 表示每 2 天/周/月 */
+  interval: number;
+  /** 每周：指定星期几，0=周日 1=周一 ... 6=周六 */
+  days?: number[];
+  /** 每月：指定几号（1-31） */
+  dayOfMonth?: number;
+}
+
 export interface TodoItem {
   id: string;
   text: string;
@@ -20,4 +33,10 @@ export interface TodoItem {
   dueDate: number;
   /** 是否已触发过提醒 */
   reminded: boolean;
+  /** 是否为循环待办 */
+  isRecurring: boolean;
+  /** 循环类型 */
+  recurrenceType: RecurrenceType;
+  /** 循环规则 JSON 配置 */
+  recurrenceConfig: string;
 }
