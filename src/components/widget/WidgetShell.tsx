@@ -72,6 +72,7 @@ export function WidgetShell() {
     handleRecurrenceCancel,
     updateTodoText,
     toggleCompleted,
+    reorderTodos,
     menuActions,
   } = useWidgetActions();
 
@@ -149,6 +150,7 @@ export function WidgetShell() {
           onChangeText={updateTodoText}
           onEndEdit={handleEndEdit}
           onToggleCompleted={toggleCompleted}
+          onReorder={reorderTodos}
         />
 
         <FooterBar

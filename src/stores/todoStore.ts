@@ -37,6 +37,8 @@ export interface TodoStoreActions {
   ) => void;
   /** 直接更新一条 todo（用于自动推进循环时间等场景） */
   updateTodoDirect: (id: string, dueDate: number) => void;
+  /** 拖拽排序：将 fromId 移到 toId 的位置 */
+  reorderTodos: (fromId: string, toId: string) => void;
   clearError: () => void;
 }
 
@@ -271,6 +273,42 @@ export const useTodoStore = create<TodoStoreState & TodoStoreActions>()(
         dbWrite(
           updateTodo(updated),
           "updateTodoDirect",
+          (msg) => set({ lastError: msg }),
+        );
+      }
+    },
+
+    reorderTodos: (fromId, toId) => {
+      const { todos } = get();
+      // 仅在活跃待办中排序
+      const active = todos.filter((x) => !x.completed);
+      const completed = todos.filter((x) => x.completed);
+
+      const fromIdx = active.findIndex((x) => x.id === fromId);
+      const toIdx = active.findIndex((x) => x.id === toId);
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+
+      const reordered = [...active];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+
+      const now = Date.now();
+      const updated = [
+        ...reordered.map((t, i) => ({
+          ...t,
+          sortOrder: i + 1,
+          updateTime: now,
+        })),
+        ...completed,
+      ];
+
+      set({ todos: updated });
+
+      // 异步写入 DB
+      for (const t of updated) {
+        dbWrite(
+          updateTodo(t),
+          "reorderTodos",
           (msg) => set({ lastError: msg }),
         );
       }

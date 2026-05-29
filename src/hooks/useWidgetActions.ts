@@ -23,6 +23,7 @@ export function useWidgetActions() {
   const setTodoColor = useTodoStore((s) => s.setTodoColor);
   const setTodoDueDate = useTodoStore((s) => s.setTodoDueDate);
   const setTodoRecurrence = useTodoStore((s) => s.setTodoRecurrence);
+  const reorderTodos = useTodoStore((s) => s.reorderTodos);
   const commitTodoEdit = useTodoStore((s) => s.commitTodoEdit);
 
   // ── 本地 UI 状态 ──
@@ -165,6 +166,7 @@ export function useWidgetActions() {
     handleRecurrenceCancel: () => setRecurrencePicker(null),
     updateTodoText,
     toggleCompleted,
+    reorderTodos,
     menuActions,
   };
 }

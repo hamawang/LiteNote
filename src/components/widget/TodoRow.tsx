@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Locale } from "@/i18n";
 import { t } from "@/i18n";
 import { COLOR_DOT_STYLE } from "@/lib/itemColors";
@@ -32,6 +34,12 @@ export function TodoRow({
 }: TodoRowProps) {
   const accent = COLOR_DOT_STYLE[todo.colorId].background;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 仅未完成且非编辑态的待办可拖拽
+  const sortable = useSortable({
+    id: todo.id,
+    disabled: todo.completed || editing,
+  });
 
   // 每分钟刷新当前时间戳，确保逾期状态能自动更新
   const now = useNow(60_000);
@@ -75,17 +83,27 @@ export function TodoRow({
     }
   }, [editing]);
 
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+  };
+
   return (
     <div
+      ref={sortable.setNodeRef}
+      {...sortable.attributes}
+      {...sortable.listeners}
       data-tauri-no-drag
       onContextMenu={(e) => {
         e.preventDefault();
         onContextMenu(e);
       }}
       className={
-        "flex min-h-12 cursor-default items-center gap-2 border-b border-white/15 px-2 transition sm:px-3 " +
-        (selected ? "bg-white/18 " : "hover:bg-white/10 ")
+        "flex min-h-12 cursor-default items-center gap-1 border-b border-white/15 px-2 touch-none sm:px-3 " +
+        (selected ? "bg-white/18 " : "hover:bg-white/10 ") +
+        (sortable.isDragging ? "opacity-50 shadow-lg bg-white/20 rounded-md z-10" : "")
       }
+      style={style}
     >
       {/* 循环待办：显示循环图标，不可点击完成 */}
       {todo.isRecurring ? (
@@ -118,6 +136,7 @@ export function TodoRow({
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full outline-none transition " +
             "focus-visible:ring-2 focus-visible:ring-white/50"
           }
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleCompleted();

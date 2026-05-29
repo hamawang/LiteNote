@@ -1,4 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import type { Locale } from "@/i18n";
 import { t } from "@/i18n";
 import { sortTodos } from "@/lib/todoSort";
@@ -20,6 +34,7 @@ interface TodoListProps {
   onChangeText: (id: string, text: string) => void;
   onEndEdit: () => void;
   onToggleCompleted: (id: string) => void;
+  onReorder: (fromId: string, toId: string) => void;
 }
 
 export function TodoList({
@@ -33,17 +48,38 @@ export function TodoList({
   onChangeText,
   onEndEdit,
   onToggleCompleted,
+  onReorder,
 }: TodoListProps) {
   const [completedExpanded, setCompletedExpanded] = useState(false);
 
-  const { activeSorted, completedSorted } = useMemo(() => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const { activeSorted, completedSorted, activeIds } = useMemo(() => {
     const active = todos.filter((x) => !x.completed);
     const done = todos.filter((x) => x.completed);
     return {
       activeSorted: sortTodos(active),
       completedSorted: sortTodos(done),
+      activeIds: active.map((x) => x.id),
     };
   }, [todos]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (over && active.id !== over.id) {
+        onReorder(String(active.id), String(over.id));
+      }
+    },
+    [onReorder],
+  );
 
   const emptyCenter =
     "flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-6 text-center text-sm text-white/60";
@@ -82,7 +118,18 @@ export function TodoList({
               : emptyHint}
           </div>
         ) : (
-          renderRows(activeSorted)
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={activeIds}
+              strategy={verticalListSortingStrategy}
+            >
+              {renderRows(activeSorted)}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
