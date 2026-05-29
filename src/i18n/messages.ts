@@ -58,6 +58,8 @@ export const messages = {
     recurPickDay: "选择星期",
     recurPickDayOfMonth: "选择日期",
     recurPickTime: "选择时间",
+    reminderTitle: "轻签 · 待办提醒",
+    emptyTodo: "(空)",
   },
   en: {
     appName: "LiteNote",
@@ -120,6 +122,8 @@ export const messages = {
     recurPickDay: "Day of week",
     recurPickDayOfMonth: "Day of month",
     recurPickTime: "Time",
+    reminderTitle: "LiteNote · To-do reminder",
+    emptyTodo: "(empty)",
   },
 } as const;
 

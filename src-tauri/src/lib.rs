@@ -146,8 +146,66 @@ fn advance_recurring_todos(conn: &Connection, now_ms: i64) {
     }
 }
 
+/// 从 settings 表读取并解析当前语言（与前端 resolveLocale 逻辑一致）
+fn load_resolved_locale(conn: &Connection) -> &'static str {
+    let mode: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'localeMode'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "system".to_string());
+
+    match mode.as_str() {
+        "zh-CN" => "zh-CN",
+        "en" => "en",
+        _ => {
+            match sys_locale::get_locale() {
+                Some(loc) if loc.starts_with("zh") => "zh-CN",
+                Some(_) => "en",
+                None => "zh-CN",
+            }
+        }
+    }
+}
+
+fn reminder_title(locale: &str) -> &'static str {
+    match locale {
+        "zh-CN" => "轻签 · 待办提醒",
+        _ => "LiteNote · To-do reminder",
+    }
+}
+
+fn empty_todo_text(locale: &str) -> &'static str {
+    match locale {
+        "zh-CN" => "(空)",
+        _ => "(empty)",
+    }
+}
+
+/// 与前端 `tauri-plugin-sql` 一致：数据库位于 app_config_dir/litenote.db
+fn litenote_db_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_config_dir()
+        .ok()
+        .map(|dir| dir.join("litenote.db"))
+}
+
+fn todos_table_exists(conn: &Connection) -> bool {
+    conn.query_row(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='todos' LIMIT 1",
+        [],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
 /// 检查并发送到期提醒（从 Rust 端直接操作 SQLite）
 fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
+    if !db_path.exists() {
+        return;
+    }
+
     let conn = match Connection::open(db_path) {
         Ok(c) => c,
         Err(e) => {
@@ -155,6 +213,10 @@ fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
             return;
         }
     };
+
+    if !todos_table_exists(&conn) {
+        return;
+    }
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -190,11 +252,12 @@ fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
     };
 
     if !rows.is_empty() {
+        let locale = load_resolved_locale(&conn);
         println!("[LiteNote] 发现 {} 条待办需要提醒", rows.len());
 
         for (id, text) in &rows {
             let body = if text.is_empty() {
-                "(空)".to_string()
+                empty_todo_text(locale).to_string()
             } else if text.len() > 40 {
                 format!("{}…", &text[..40])
             } else {
@@ -205,7 +268,7 @@ fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
             if let Err(e) = app
                 .notification()
                 .builder()
-                .title("轻签 · 待办提醒")
+                .title(reminder_title(locale))
                 .body(&body)
                 .show()
             {
@@ -231,15 +294,14 @@ fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
 fn start_rust_reminder_poll(app: &AppHandle) {
     let handle = app.clone();
 
-    // 获取数据库路径
-    let db_dir = match app.path().app_local_data_dir() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("[LiteNote] 无法获取应用数据目录: {e}");
+    // 获取数据库路径（与 plugin-sql 的 app_config_dir 保持一致）
+    let db_path = match litenote_db_path(app) {
+        Some(p) => p,
+        None => {
+            eprintln!("[LiteNote] 无法获取应用配置目录");
             return;
         }
     };
-    let db_path = db_dir.join("litenote.db");
 
     println!(
         "[LiteNote] 启动 Rust 端提醒轮询，数据库路径: {}",

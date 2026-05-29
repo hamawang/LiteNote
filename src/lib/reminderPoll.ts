@@ -1,4 +1,5 @@
-import { getDb } from "@/lib/db";
+import { getDb, loadSettings } from "@/lib/db";
+import { resolveLocale, t } from "@/i18n";
 import { computeNextDueDate } from "@/lib/recurrence";
 import type { RecurrenceType } from "@/types/todo";
 
@@ -31,6 +32,8 @@ export function startReminderPoll(): void {
   const check = async () => {
     try {
       const db = await getDb();
+      const settings = await loadSettings();
+      const locale = resolveLocale(settings.localeMode);
       const now = Date.now();
       const threshold = now + REMIND_ADVANCE_MS;
 
@@ -57,9 +60,9 @@ export function startReminderPoll(): void {
         }
         if (permitted) {
           for (const row of rows) {
-            const text = row.text || "(空)";
+            const text = row.text || t(locale, "emptyTodo");
             sendNotification({
-              title: "轻签 · 待办提醒",
+              title: t(locale, "reminderTitle"),
               body: text.length > 40 ? text.slice(0, 40) + "…" : text,
             });
 
