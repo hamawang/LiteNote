@@ -188,6 +188,8 @@ export function TodoRow({
                 (e.target as HTMLTextAreaElement).blur();
               } else if (e.key === "Enter" && e.shiftKey) {
                 e.stopPropagation(); // 允许默认换行，阻止冒泡到父按钮
+              } else if (e.key === " ") {
+                e.stopPropagation(); // 允许输入空格，阻止冒泡到父按钮
               }
             }}
           />
