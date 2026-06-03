@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
+  pointerWithin,
   PointerSensor,
   KeyboardSensor,
   useSensor,
@@ -226,7 +226,7 @@ export function WidgetShell() {
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={pointerWithin}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -258,16 +258,11 @@ export function WidgetShell() {
             onToggleCompleted={toggleCompleted}
           />
 
-          {/* 拖拽预览：便签图标 */}
+          {/* 拖拽预览：显示待办内容 */}
           <DragOverlay dropAnimation={null}>
             {activeDragTodo ? (
-              <div className="flex items-center justify-center w-8 h-8 rounded-md bg-white/20 backdrop-blur-md shadow-lg ring-1 ring-white/25">
-                <svg className="w-4.5 h-4.5 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="8" y1="13" x2="16" y2="13" />
-                  <line x1="8" y1="17" x2="13" y2="17" />
-                </svg>
+              <div className="rounded-lg bg-white/15 backdrop-blur-md px-3 py-2 text-sm text-white shadow-lg ring-1 ring-white/20 max-w-[200px] truncate">
+                {activeDragTodo.text || (locale === "zh-CN" ? "（空）" : "(empty)")}
               </div>
             ) : null}
           </DragOverlay>
