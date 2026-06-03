@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import { resolveLocale, t } from "@/i18n";
 import { openHelpWindow } from "@/lib/openHelpWindow";
 import { openSettingsWindow } from "@/lib/openSettingsWindow";
@@ -15,6 +29,19 @@ import { HeaderBar } from "./HeaderBar";
 import { RecurrencePicker } from "./RecurrencePicker";
 import { TodoContextMenu } from "./TodoContextMenu";
 import { TodoList } from "./TodoList";
+import { WeekCalendar } from "./WeekCalendar";
+
+/** 获取指定时间戳当天的开始时间（00:00:00） */
+function startOfDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** 获取指定时间戳当天的结束时间（23:59:59.999） */
+function endOfDay(ts: number): number {
+  return startOfDay(ts) + 86_399_999;
+}
 
 export function WidgetShell() {
   const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
@@ -26,6 +53,12 @@ export function WidgetShell() {
   const clearSettingsError = useSettingsStore((s) => s.clearError);
   const lastTodoError = useTodoStore((s) => s.lastError);
   const clearTodoError = useTodoStore((s) => s.clearError);
+
+  // 周日历选中日期（null 表示不筛选）
+  const [selectedDate, setSelectedDate] = useState<number | null>(null);
+
+  // 直接获取 setTodoDueDate（拖拽到日历日期时需用）
+  const setTodoDueDate = useTodoStore((s) => s.setTodoDueDate);
 
   const lastError = lastSettingsError || lastTodoError;
 
@@ -76,6 +109,22 @@ export function WidgetShell() {
     menuActions,
   } = useWidgetActions();
 
+  // 当前拖拽中的待办 id（用于 DragOverlay）
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const activeDragTodo = useMemo(
+    () => (activeDragId ? todos.find((t) => t.id === activeDragId) ?? null : null),
+    [activeDragId, todos],
+  );
+
+  // 根据周日历选中日期过滤待办
+  const filteredTodos = useMemo(() => {
+    if (selectedDate === null) return todos;
+    return todos.filter((t) => {
+      if (t.dueDate <= 0) return false;
+      return t.dueDate >= selectedDate && t.dueDate <= endOfDay(selectedDate);
+    });
+  }, [todos, selectedDate]);
+
   useEffect(() => {
     document.documentElement.lang = locale === "zh-CN" ? "zh-CN" : "en";
   }, [locale]);
@@ -97,6 +146,44 @@ export function WidgetShell() {
       /* 非 Tauri */
     }
   }, []);
+
+  // 拖拽传感器
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  // 拖拽开始：记录被拖的待办
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  }, []);
+
+  // 统一拖拽结束处理：排序 or 设置截止日期
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveDragId(null);
+
+      if (!over) return;
+
+      const activeId = String(active.id);
+      const overId = String(over.id);
+
+      const overData = over.data.current as { type?: string; date?: number } | undefined;
+
+      if (overData?.type === "day" && overData.date) {
+        setTodoDueDate(activeId, overData.date);
+        setSelectedDate(overData.date);
+      } else if (activeId !== overId) {
+        reorderTodos(activeId, overId);
+      }
+    },
+    [setTodoDueDate, reorderTodos],
+  );
 
   return (
     <>
@@ -137,21 +224,54 @@ export function WidgetShell() {
           onHide={handleHide}
         />
 
-        {!clockCollapsed ? <ClockSection locale={locale} /> : null}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <WeekCalendar
+            locale={locale}
+            todos={todos}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+          />
 
-        <TodoList
-          locale={locale}
-          todos={todos}
-          selectedId={selectedId}
-          editingId={editingId}
-          emptyHint={t(locale, "emptyHint")}
-          onSelect={handleSelect}
-          onContextMenu={handleContextMenu}
-          onChangeText={updateTodoText}
-          onEndEdit={handleEndEdit}
-          onToggleCompleted={toggleCompleted}
-          onReorder={reorderTodos}
-        />
+          {!clockCollapsed ? <ClockSection locale={locale} /> : null}
+
+          <TodoList
+            locale={locale}
+            todos={filteredTodos}
+            selectedId={selectedId}
+            editingId={editingId}
+            emptyHint={
+              selectedDate !== null
+                ? locale === "zh-CN"
+                  ? "该日期暂无待办"
+                  : "No tasks for this day"
+                : t(locale, "emptyHint")
+            }
+            onSelect={handleSelect}
+            onContextMenu={handleContextMenu}
+            onChangeText={updateTodoText}
+            onEndEdit={handleEndEdit}
+            onToggleCompleted={toggleCompleted}
+          />
+
+          {/* 拖拽预览：便签图标 */}
+          <DragOverlay dropAnimation={null}>
+            {activeDragTodo ? (
+              <div className="flex items-center justify-center w-8 h-8 rounded-md bg-white/20 backdrop-blur-md shadow-lg ring-1 ring-white/25">
+                <svg className="w-4.5 h-4.5 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="13" y2="17" />
+                </svg>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
 
         <FooterBar
           locale={locale}

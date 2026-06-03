@@ -39,6 +39,7 @@ export function TodoRow({
   const sortable = useSortable({
     id: todo.id,
     disabled: todo.completed || editing,
+    data: { type: "todo" as const },
   });
 
   // 每分钟刷新当前时间戳，确保逾期状态能自动更新
@@ -101,7 +102,7 @@ export function TodoRow({
       className={
         "flex min-h-12 cursor-default items-center gap-1 border-b border-white/15 px-2 touch-none sm:px-3 " +
         (selected ? "bg-white/18 " : "hover:bg-white/10 ") +
-        (sortable.isDragging ? "opacity-50 shadow-lg bg-white/20 rounded-md z-10" : "")
+        (sortable.isDragging ? "opacity-0" : "")
       }
       style={style}
     >
