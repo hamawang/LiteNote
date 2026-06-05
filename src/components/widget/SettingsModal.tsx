@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Locale, LocaleMode } from "@/i18n";
 import type { MessageKey } from "@/i18n/messages";
 import { t } from "@/i18n";
@@ -42,8 +43,8 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-/* ──────────── Select 下拉 ──────────── */
-function Select<T extends string>({
+/* ──────────── CustomSelect 自定义下拉 ──────────── */
+function CustomSelect<T extends string>({
   value,
   onChange,
   options,
@@ -54,23 +55,122 @@ function Select<T extends string>({
   options: readonly { value: T; label: string }[];
   label: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (listRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    // 延迟绑定，避免打开时的 click 事件立刻触发关闭
+    const id = setTimeout(() => document.addEventListener("click", handler), 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("click", handler);
+    };
+  }, [open]);
+
+  // ESC 关闭
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
+
+  const curLabel = options.find((o) => o.value === value)?.label ?? "";
+
+  // 计算下拉面板位置
+  const getPopStyle = useCallback((): React.CSSProperties => {
+    if (!btnRef.current) return {};
+    const rect = btnRef.current.getBoundingClientRect();
+    return {
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 60,
+    };
+  }, []);
+
   return (
     <div className="flex items-center justify-between">
-      <span style={{ color: "var(--ln-theme-text)" }} className="text-sm shrink-0 mr-3">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-lg px-2.5 py-1.5 text-sm border-0 outline-none cursor-pointer flex-1 max-w-[140px]"
-        style={{
-          background: "var(--ln-theme-surface)",
-          color: "var(--ln-theme-text)",
-          border: `1px solid var(--ln-theme-border)`,
-        }}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
+      <span style={{ color: "var(--ln-theme-text)" }} className="text-sm shrink-0 mr-3">
+        {label}
+      </span>
+      <div className="flex-1 max-w-[140px]">
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm"
+          style={{
+            background: "var(--ln-theme-surface)",
+            color: "var(--ln-theme-text)",
+            border: `1px solid var(--ln-theme-border)`,
+          }}
+        >
+          <span>{curLabel}</span>
+          <svg className="h-3 w-3 shrink-0 ml-1" viewBox="0 0 12 12" fill="none">
+            <path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {open &&
+          createPortal(
+            <div
+              ref={listRef}
+              style={getPopStyle()}
+              className="rounded-lg overflow-hidden shadow-xl"
+            >
+              <div
+                style={{
+                  background: "var(--ln-theme-bg)",
+                  backdropFilter: "var(--ln-theme-backdrop)",
+                  border: `1px solid var(--ln-theme-border)`,
+                  borderRadius: "inherit",
+                }}
+              >
+                {options.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 text-sm transition-colors"
+                    style={{
+                      color: "var(--ln-theme-text)",
+                      background:
+                        opt.value === value
+                          ? "var(--ln-theme-surface-active)"
+                          : "transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (opt.value !== value)
+                        (e.target as HTMLElement).style.background = "var(--ln-theme-surface-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (opt.value !== value)
+                        (e.target as HTMLElement).style.background = "transparent";
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )}
+      </div>
     </div>
   );
 }
@@ -105,15 +205,15 @@ export function SettingsModal({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
-      className="absolute inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: "var(--ln-theme-overlay)" }}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
-        className="w-[320px] max-h-[90%] overflow-y-auto rounded-2xl px-5 py-5 shadow-2xl"
+        className="w-[320px] max-h-[90%] overflow-y-auto rounded-lg px-5 py-5 shadow-2xl"
         style={{ background: "var(--ln-theme-bg)", backdropFilter: "var(--ln-theme-backdrop)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -206,7 +306,7 @@ export function SettingsModal({
 
         {/* 主题 */}
         <section className="mb-4">
-          <Select
+          <CustomSelect
             label={mk("themeLabel")}
             value={theme}
             onChange={onSetTheme}
@@ -220,7 +320,7 @@ export function SettingsModal({
 
         {/* 语言 */}
         <section>
-          <Select
+          <CustomSelect
             label={mk("language")}
             value={localeMode}
             onChange={onSetLocaleMode}
@@ -232,6 +332,7 @@ export function SettingsModal({
           />
         </section>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
