@@ -69,6 +69,14 @@ function DayCell({
   const showDot = hasDue || hasOverdue;
   const dotColor = hasOverdue ? "bg-amber-400/80" : "bg-red-400/80";
 
+  const textColor = isOver
+    ? "#fff"
+    : selected
+      ? "#fff"
+      : isToday
+        ? "rgba(253,230,138,0.9)"
+        : "rgba(255,255,255,0.6)";
+
   return (
     <button
       ref={setNodeRef}
@@ -78,13 +86,14 @@ function DayCell({
         "relative flex flex-col items-center justify-center",
         "flex-1 max-w-[52px] h-14 rounded-lg text-xs transition",
         isOver
-          ? "bg-sky-500/30 text-white ring-1 ring-sky-400/50 scale-105"
+          ? "bg-sky-500/30 ring-1 ring-sky-400/50 scale-105"
           : selected
-            ? "bg-white/12 text-white ring-1 ring-white/10"
+            ? "bg-white/12 ring-1 ring-white/10"
             : isToday
-              ? "bg-white/[0.06] text-amber-200/90"
-              : "text-white/40 hover:bg-white/[0.04] hover:text-white/70",
+              ? "bg-white/[0.06]"
+              : "hover:bg-white/[0.04]",
       ].join(" ")}
+      style={{ color: textColor }}
     >
       {/* 星期 */}
       <span className={`leading-none text-[11px] ${
@@ -165,7 +174,8 @@ export function WeekCalendar({
 
   // 箭头按钮样式
   const arrowBtn =
-    "flex h-8 w-6 shrink-0 items-center justify-center rounded-md text-white/30 transition hover:text-white/70 hover:bg-white/8";
+    "flex h-8 w-6 shrink-0 items-center justify-center rounded-md transition hover:bg-white/8";
+  const arrowColor = "rgba(255,255,255,0.6)";
 
   return (
     <nav
@@ -176,6 +186,7 @@ export function WeekCalendar({
       <button
         type="button"
         className={arrowBtn}
+        style={{ color: arrowColor }}
         onClick={() => setWeekOffset((o) => o - 1)}
         aria-label="上一周"
       >
@@ -204,6 +215,7 @@ export function WeekCalendar({
       <button
         type="button"
         className={arrowBtn}
+        style={{ color: arrowColor }}
         onClick={() => setWeekOffset((o) => o + 1)}
         aria-label="下一周"
       >
@@ -216,7 +228,8 @@ export function WeekCalendar({
       {!isCurrentWeek ? (
         <button
           type="button"
-          className="shrink-0 rounded-md px-1.5 py-1 text-[11px] text-white/35 transition hover:text-white/70 hover:bg-white/8"
+          className="shrink-0 rounded-md px-1.5 py-1 text-[11px] transition hover:bg-white/8"
+          style={{ color: "rgba(255,255,255,0.55)" }}
           onClick={() => {
             setWeekOffset(0);
             onSelectDate(null);

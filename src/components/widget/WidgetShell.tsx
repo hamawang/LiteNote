@@ -239,14 +239,14 @@ export function WidgetShell() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
+          {!clockCollapsed ? <ClockSection locale={locale} /> : null}
+
           <WeekCalendar
             locale={locale}
             todos={todos}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
           />
-
-          {!clockCollapsed ? <ClockSection locale={locale} /> : null}
 
           <TodoList
             locale={locale}

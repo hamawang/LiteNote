@@ -39,7 +39,7 @@ function HelpApp() {
             <div className="space-y-1.5">
               <div className={row}>
                 <span className={keyBadge}>
-                  {zh ? "Cmd+Shift+L" : "Ctrl+Shift+L"}
+                  "Cmd/Ctrl+Shift+L"
                 </span>
                 <span>{zh ? "显示 / 隐藏窗口" : "Show / hide window"}</span>
               </div>
