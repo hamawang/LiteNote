@@ -45,7 +45,6 @@ export default defineConfig(async () => ({
       input: {
         main: path.resolve(rootDir, "index.html"),
         help: path.resolve(rootDir, "help.html"),
-        settings: path.resolve(rootDir, "settings.html"),
       },
     },
   },

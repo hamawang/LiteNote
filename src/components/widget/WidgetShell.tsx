@@ -16,7 +16,6 @@ import {
 } from "@dnd-kit/sortable";
 import { resolveLocale, t } from "@/i18n";
 import { openHelpWindow } from "@/lib/openHelpWindow";
-import { openSettingsWindow } from "@/lib/openSettingsWindow";
 import { useWidgetActions } from "@/hooks/useWidgetActions";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTodoStore } from "@/stores/todoStore";
@@ -27,6 +26,7 @@ import { DueDatePicker } from "./DueDatePicker";
 import { FooterBar } from "./FooterBar";
 import { HeaderBar } from "./HeaderBar";
 import { RecurrencePicker } from "./RecurrencePicker";
+import { SettingsModal } from "./SettingsModal";
 import { TodoContextMenu } from "./TodoContextMenu";
 import { TodoList } from "./TodoList";
 import { WeekCalendar } from "./WeekCalendar";
@@ -47,8 +47,15 @@ export function WidgetShell() {
   const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
   const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
   const panelOpacity = useSettingsStore((s) => s.panelOpacity);
+  const setPanelOpacity = useSettingsStore((s) => s.setPanelOpacity);
   const localeMode = useSettingsStore((s) => s.localeMode);
+  const setLocaleMode = useSettingsStore((s) => s.setLocaleMode);
   const clockCollapsed = useSettingsStore((s) => s.clockCollapsed);
+  const setClockCollapsed = useSettingsStore((s) => s.setClockCollapsed);
+  const autoStart = useSettingsStore((s) => s.autoStart);
+  const setAutoStart = useSettingsStore((s) => s.setAutoStart);
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
   const lastSettingsError = useSettingsStore((s) => s.lastError);
   const clearSettingsError = useSettingsStore((s) => s.clearError);
   const lastTodoError = useTodoStore((s) => s.lastError);
@@ -56,6 +63,7 @@ export function WidgetShell() {
 
   // 周日历选中日期（null 表示不筛选）
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // 直接获取 setTodoDueDate（拖拽到日历日期时需用）
   const setTodoDueDate = useTodoStore((s) => s.setTodoDueDate);
@@ -224,12 +232,7 @@ export function WidgetShell() {
               fallbackAlertBody: t(locale, "helpOpenFailed"),
             })
           }
-          onOpenSettings={() =>
-            void openSettingsWindow({
-              title: `${t(locale, "appName")} · ${t(locale, "settings")}`,
-              fallbackAlertBody: t(locale, "settingsOpenFailed"),
-            })
-          }
+          onOpenSettings={() => setShowSettings(true)}
           onHide={handleHide}
         />
 
@@ -282,6 +285,23 @@ export function WidgetShell() {
           clearCompletedDisabled={completedCount === 0}
           onAdd={handleAddWithDate}
           onClearClick={() => setConfirmClear(true)}
+        />
+
+        {/* 设置模态框 */}
+        <SettingsModal
+          open={showSettings}
+          locale={locale}
+          localeMode={localeMode}
+          onSetLocaleMode={setLocaleMode}
+          panelOpacity={panelOpacity}
+          onPanelOpacityChange={setPanelOpacity}
+          clockCollapsed={clockCollapsed}
+          onSetClockCollapsed={setClockCollapsed}
+          autoStart={autoStart}
+          onSetAutoStart={setAutoStart}
+          theme={theme}
+          onSetTheme={setTheme}
+          onClose={() => setShowSettings(false)}
         />
       </div>
 
