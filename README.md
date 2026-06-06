@@ -46,7 +46,11 @@
 
 - **跨平台** — 支持 Windows（NSIS 安装包 + 绿色便携版）与 macOS（`.app` / `.dmg`）
 
-<img src="docs/images/main.png" width="380" alt="主窗口">
+<p align="center">
+  <img src="docs/images/main.png" width="32%" alt="毛玻璃主窗口">&nbsp;
+  <img src="docs/images/maoboli.png" width="32%" alt="毛玻璃效果">&nbsp;
+  <img src="docs/images/qianse.png" width="32%" alt="浅色主题">&nbsp;
+</p>
 
 ## 应用场景
 

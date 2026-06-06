@@ -47,7 +47,11 @@ Many to-do and note-taking tools are feature-packed and heavy — not ideal for 
 
 - **Cross-Platform** — Windows (NSIS installer + portable) and macOS (`.app` / `.dmg`)
 
-<img src="docs/images/main.png" width="380" alt="Main Window">
+<p align="center">
+  <img src="docs/images/main.png" width="32%" alt="Main window">&nbsp;
+  <img src="docs/images/maoboli.png" width="32%" alt="Glass effect">&nbsp;
+  <img src="docs/images/qianse.png" width="32%" alt="Light theme">&nbsp;
+</p>
 
 ## Use Cases
 
