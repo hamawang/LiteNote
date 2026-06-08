@@ -20,6 +20,7 @@ import { useWidgetActions } from "@/hooks/useWidgetActions";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTodoStore } from "@/stores/todoStore";
 import type { TodoColorId } from "@/types/todo";
+import { generateExportContent, saveTxt } from "@/lib/exportTodos";
 import { ClockSection } from "./ClockSection";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DueDatePicker } from "./DueDatePicker";
@@ -161,6 +162,12 @@ export function WidgetShell() {
     handleAdd(selectedDate !== null ? endOfDay(selectedDate) : undefined);
   }, [handleAdd, selectedDate]);
 
+  // 导出待办
+  const handleExport = useCallback(() => {
+    const content = generateExportContent(todos, locale);
+    void saveTxt(content);
+  }, [todos, locale]);
+
   // 拖拽传感器
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -279,6 +286,7 @@ export function WidgetShell() {
           locale={locale}
           clearCompletedDisabled={completedCount === 0}
           onAdd={handleAddWithDate}
+          onExport={handleExport}
           onClearClick={() => setConfirmClear(true)}
         />
 

@@ -5,6 +5,7 @@ import { t } from "@/i18n";
 interface FooterBarProps {
   locale: Locale;
   onAdd: () => void;
+  onExport: () => void;
   onClearClick: () => void;
   /** 无已完成项时禁用清除按钮 */
   clearCompletedDisabled?: boolean;
@@ -13,6 +14,7 @@ interface FooterBarProps {
 export function FooterBar({
   locale,
   onAdd,
+  onExport,
   onClearClick,
   clearCompletedDisabled = false,
 }: FooterBarProps) {
@@ -55,43 +57,74 @@ export function FooterBar({
           </svg>
           {mk("footerAdd")}
         </button>
-        <button
-          type="button"
-          title={
-            clearCompletedDisabled ? undefined : mk("footerClearTooltip")
-          }
-          disabled={clearCompletedDisabled}
-          onClick={onClearClick}
-          className={clearCompletedDisabled ? btnDisabled : btnActive}
-          style={clearCompletedDisabled ? btnDisabledStyle : btnStyle}
-        >
-          <svg
-            className="h-4 w-4 shrink-0 opacity-95"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title={mk("footerExportTooltip")}
+            onClick={onExport}
+            className={btnActive}
+            style={btnStyle}
           >
-            <path
-              d="M9 3h6l1 2h5v2H3V5h5l1-2Z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M6 9h12l-1 12H7L6 9Z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M10 13v6M14 13v6"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-          {mk("footerClear")}
-        </button>
+            <svg
+              className="h-4 w-4 shrink-0 opacity-95"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+            >
+              <path
+                d="M12 3v12M8 11l4 4 4-4"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            {mk("footerExport")}
+          </button>
+          <button
+            type="button"
+            title={
+              clearCompletedDisabled ? undefined : mk("footerClearTooltip")
+            }
+            disabled={clearCompletedDisabled}
+            onClick={onClearClick}
+            className={clearCompletedDisabled ? btnDisabled : btnActive}
+            style={clearCompletedDisabled ? btnDisabledStyle : btnStyle}
+          >
+            <svg
+              className="h-4 w-4 shrink-0 opacity-95"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+            >
+              <path
+                d="M9 3h6l1 2h5v2H3V5h5l1-2Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M6 9h12l-1 12H7L6 9Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M10 13v6M14 13v6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            {mk("footerClear")}
+          </button>
+        </div>
       </div>
     </footer>
   );

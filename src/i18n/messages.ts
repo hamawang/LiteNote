@@ -2,8 +2,10 @@ export const messages = {
   "zh-CN": {
     appName: "轻签",
     footerAdd: "添加",
+    footerExport: "导出",
     footerClear: "清空",
     footerAddTooltip: "添加一条待办事项",
+    footerExportTooltip: "导出待办到文本文件",
     footerClearTooltip: "清除全部已完成待办",
     clearCompleted: "清除已完成",
     clearCompletedConfirm: "确定清除全部已完成待办？此操作不可撤销。",
@@ -66,8 +68,10 @@ export const messages = {
   en: {
     appName: "LiteNote",
     footerAdd: "Add",
+    footerExport: "Export",
     footerClear: "Clear",
     footerAddTooltip: "Add a new to-do",
+    footerExportTooltip: "Export todos to text file",
     footerClearTooltip: "Remove all completed to-dos",
     clearCompleted: "Clear completed",
     clearCompletedConfirm:

@@ -24,6 +24,11 @@
     "autostart:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
-    "autostart:allow-is-enabled"
+    "autostart:allow-is-enabled",
+    "dialog:default",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "fs:scope-app-recursive"
   ]
 }
