@@ -61,6 +61,9 @@ export function WidgetShell() {
   const clearSettingsError = useSettingsStore((s) => s.clearError);
   const lastTodoError = useTodoStore((s) => s.lastError);
   const clearTodoError = useTodoStore((s) => s.clearError);
+  const lastTodoSuccess = useTodoStore((s) => s.lastSuccess);
+  const clearTodoSuccess = useTodoStore((s) => s.clearSuccess);
+  const setTodoSuccess = useTodoStore((s) => s.setSuccess);
 
   // 周日历选中日期（null 表示不筛选）
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
@@ -86,6 +89,13 @@ export function WidgetShell() {
       return () => window.clearTimeout(id);
     }
   }, [lastTodoError, clearTodoError]);
+
+  useEffect(() => {
+    if (lastTodoSuccess) {
+      const id = window.setTimeout(() => clearTodoSuccess(), 2500);
+      return () => window.clearTimeout(id);
+    }
+  }, [lastTodoSuccess, clearTodoSuccess]);
 
   const locale = useMemo(() => resolveLocale(localeMode), [localeMode]);
 
@@ -117,7 +127,7 @@ export function WidgetShell() {
     toggleCompleted,
     reorderTodos,
     menuActions,
-  } = useWidgetActions();
+  } = useWidgetActions(locale);
 
   // 当前拖拽中的待办 id（用于 DragOverlay）
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -165,8 +175,10 @@ export function WidgetShell() {
   // 导出待办
   const handleExport = useCallback(() => {
     const content = generateExportContent(todos, locale);
-    void saveTxt(content);
-  }, [todos, locale]);
+    void saveTxt(content).then(() => {
+      setTodoSuccess(t(locale, "toastExportSuccess"));
+    });
+  }, [todos, locale, setTodoSuccess]);
 
   // 拖拽传感器
   const sensors = useSensors(
@@ -212,10 +224,14 @@ export function WidgetShell() {
 
   return (
     <>
-      {/* 错误提示条 */}
-      {lastError ? (
-        <div className="absolute left-2 right-2 top-12 z-[200] rounded-lg bg-red-500/90 px-3 py-2 text-xs text-white shadow-lg">
-          {lastError}
+      {/* Toast 提示（底部居中，错误优先） */}
+      {(lastError || lastTodoSuccess) ? (
+        <div
+          className={`absolute bottom-16 left-1/2 z-[200] -translate-x-1/2 rounded-full bg-black/50 px-4 py-1.5 text-xs backdrop-blur-md shadow-lg ${
+            lastError ? "text-red-300" : "text-emerald-300"
+          }`}
+        >
+          {lastError ?? lastTodoSuccess}
         </div>
       ) : null}
 

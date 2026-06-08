@@ -331,6 +331,24 @@ export function SettingsModal({
             ]}
           />
         </section>
+
+        {/* 分隔线 */}
+        <div className="my-5" style={{ borderTop: `1px solid var(--ln-theme-border-light)` }} />
+
+        {/* 快捷键（只读） */}
+        <section>
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: "var(--ln-theme-text)" }}>
+              {mk("shortcutLabel")}
+            </span>
+            <span className="text-sm" style={{ color: "var(--ln-theme-text-muted)" }}>
+              {mk("shortcutValue")}
+            </span>
+          </div>
+          <p className="text-xs mt-1" style={{ color: "var(--ln-theme-text-muted)" }}>
+            {locale === "zh-CN" ? "全局显示 / 隐藏窗口" : "Show / hide window globally"}
+          </p>
+        </section>
       </div>
     </div>,
     document.body,

@@ -14,6 +14,8 @@ export interface TodoStoreState {
   todos: TodoItem[];
   /** 最近一次 DB 写入错误信息 */
   lastError: string | null;
+  /** 最近一次操作成功提示 */
+  lastSuccess: string | null;
 }
 
 export interface TodoStoreActions {
@@ -40,6 +42,9 @@ export interface TodoStoreActions {
   /** 拖拽排序：将 fromId 移到 toId 的位置 */
   reorderTodos: (fromId: string, toId: string) => void;
   clearError: () => void;
+  /** 设置操作成功提示 */
+  setSuccess: (msg: string) => void;
+  clearSuccess: () => void;
 }
 
 function nextOrder(todos: TodoItem[]): number {
@@ -69,8 +74,11 @@ export const useTodoStore = create<TodoStoreState & TodoStoreActions>()(
   (set, get) => ({
     todos: [],
     lastError: null,
+    lastSuccess: null,
 
     clearError: () => set({ lastError: null }),
+    clearSuccess: () => set({ lastSuccess: null }),
+    setSuccess: (msg) => set({ lastSuccess: msg }),
 
     init: async () => {
       const todos = await loadTodos();

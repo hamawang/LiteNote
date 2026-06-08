@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { TodoColorId, RecurrenceType } from "@/types/todo";
+import type { Locale } from "@/i18n";
+import { t } from "@/i18n";
 import { useTodoStore } from "@/stores/todoStore";
 
 interface RecurrencePickerState {
@@ -11,7 +13,7 @@ interface RecurrencePickerState {
  * WidgetShell 业务逻辑 hook。
  * 将状态选择、UI 交互逻辑从 WidgetShell 组件中抽取出来。
  */
-export function useWidgetActions() {
+export function useWidgetActions(locale: Locale) {
   const todos = useTodoStore((s) => s.todos);
 
   const addTodo = useTodoStore((s) => s.addTodo);
@@ -25,6 +27,7 @@ export function useWidgetActions() {
   const setTodoRecurrence = useTodoStore((s) => s.setTodoRecurrence);
   const reorderTodos = useTodoStore((s) => s.reorderTodos);
   const commitTodoEdit = useTodoStore((s) => s.commitTodoEdit);
+  const setSuccess = useTodoStore((s) => s.setSuccess);
 
   // ── 本地 UI 状态 ──
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -75,21 +78,23 @@ export function useWidgetActions() {
     const sel = selectedId;
     const wasCompleted = sel !== null && todos.some((x) => x.id === sel && x.completed);
     clearCompletedTodos();
+    setSuccess(t(locale, "toastClearSuccess"));
     setConfirmClear(false);
     if (wasCompleted) {
       setSelectedId(null);
       setEditingId(null);
     }
-  }, [selectedId, todos, clearCompletedTodos]);
+  }, [selectedId, todos, clearCompletedTodos, locale, setSuccess]);
 
   const handleDeleteOne = useCallback(() => {
     if (confirmDeleteId) {
       deleteTodo(confirmDeleteId);
+      setSuccess(t(locale, "toastDeleteSuccess"));
       if (selectedId === confirmDeleteId) setSelectedId(null);
     }
     setConfirmDeleteId(null);
     setMenu(null);
-  }, [confirmDeleteId, deleteTodo, selectedId]);
+  }, [confirmDeleteId, deleteTodo, selectedId, locale, setSuccess]);
 
   const handleRecurrenceConfirm = useCallback(
     (type: RecurrenceType, config: string, dueDate: number) => {

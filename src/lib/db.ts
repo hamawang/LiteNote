@@ -6,6 +6,8 @@ const DB_NAME = "sqlite:litenote.db";
 
 /** 单例连接 */
 let _db: Database | null = null;
+/** 并发初始化互斥 Promise：多个调用方同时访问时复用同一个 Promise */
+let _dbInitPromise: Promise<Database> | null = null;
 
 // ──────────────── 设置项默认值（单一真实来源） ────────────────
 
@@ -33,15 +35,18 @@ export interface AppSettings {
 
 export async function getDb(): Promise<Database> {
   if (_db) return _db;
-  try {
-    _db = await Database.load(DB_NAME);
-    console.log("[LiteNote] 数据库连接成功:", DB_NAME);
-    await initTables(_db);
-    return _db;
-  } catch (e) {
-    console.error("[LiteNote] 数据库初始化失败:", e);
-    throw e;
+  if (!_dbInitPromise) {
+    _dbInitPromise = Database.load(DB_NAME).then(async (db) => {
+      console.log("[LiteNote] 数据库连接成功:", DB_NAME);
+      await initTables(db);
+      _db = db;
+      return db;
+    }).catch((e) => {
+      _dbInitPromise = null; // 重置，允许后续重试
+      throw e;
+    });
   }
+  return _dbInitPromise;
 }
 
 /** 是否处于可用状态（非 Tauri 环境等） */
