@@ -44,3 +44,14 @@ button {
 [data-tauri-no-drag] {
   -webkit-app-region: no-drag;
 }
+
+/* ══════════════════════════════════════════════════
+   钉钉式提醒弹窗：完全无边框、占满 WebView
+   ══════════════════════════════════════════════════ */
+html.ln-reminder,
+html.ln-reminder body,
+html.ln-reminder #root {
+  border-radius: 0 !important;
+  background: transparent !important;
+  overflow: hidden;
+}

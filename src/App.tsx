@@ -1,11 +1,28 @@
 import { useEffect } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { WidgetShell } from "@/components/widget/WidgetShell";
+import { ReminderWindow } from "@/components/window/ReminderWindow";
 import { useAppInit } from "@/hooks/useAppInit";
 import { startReminderPoll } from "@/lib/reminderPoll";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 function App() {
+  // 提醒弹窗窗口（?window=reminder）不挂载主应用，主题等不用关心
+  const isReminderWindow =
+    new URLSearchParams(window.location.search).get("window") === "reminder";
+
+  if (isReminderWindow) {
+    return (
+      <ErrorBoundary>
+        <ReminderWindow />
+      </ErrorBoundary>
+    );
+  }
+
+  return <MainApp />;
+}
+
+function MainApp() {
   useAppInit(true);
 
   const initialized = useSettingsStore((s) => s.initialized);

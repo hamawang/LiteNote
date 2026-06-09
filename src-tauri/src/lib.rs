@@ -6,12 +6,11 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime,
+    AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
 };
 #[cfg(target_os = "macos")]
-use tauri::{RunEvent, TitleBarStyle};
+use tauri::{LogicalPosition, LogicalSize, RunEvent, TitleBarStyle};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use tauri_plugin_notification::NotificationExt;
 
 /// 提醒提前量（毫秒），默认 15 分钟
 const REMIND_ADVANCE_MS: i64 = 15 * 60 * 1000;
@@ -146,43 +145,6 @@ fn advance_recurring_todos(conn: &Connection, now_ms: i64) {
     }
 }
 
-/// 从 settings 表读取并解析当前语言（与前端 resolveLocale 逻辑一致）
-fn load_resolved_locale(conn: &Connection) -> &'static str {
-    let mode: String = conn
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'localeMode'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or_else(|_| "system".to_string());
-
-    match mode.as_str() {
-        "zh-CN" => "zh-CN",
-        "en" => "en",
-        _ => {
-            match sys_locale::get_locale() {
-                Some(loc) if loc.starts_with("zh") => "zh-CN",
-                Some(_) => "en",
-                None => "zh-CN",
-            }
-        }
-    }
-}
-
-fn reminder_title(locale: &str) -> &'static str {
-    match locale {
-        "zh-CN" => "轻签 · 待办提醒",
-        _ => "LiteNote · To-do reminder",
-    }
-}
-
-fn empty_todo_text(locale: &str) -> &'static str {
-    match locale {
-        "zh-CN" => "(空)",
-        _ => "(empty)",
-    }
-}
-
 /// 与前端 `tauri-plugin-sql` 一致：数据库位于 app_config_dir/litenote.db
 fn litenote_db_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path()
@@ -198,6 +160,161 @@ fn todos_table_exists(conn: &Connection) -> bool {
         |_| Ok(()),
     )
     .is_ok()
+}
+
+/// 待办行的最小字段集合（Rust 端开窗所需）
+struct ReminderRow {
+    id: String,
+    text: String,
+    due_date: i64,
+}
+
+/// 查询到当前应当弹出提醒的待办
+/// - 命中条件：due_date > 0 且 due_date - REMIND_ADVANCE_MS <= now 且 reminded = 0
+fn query_due_reminders(conn: &Connection, now: i64) -> Vec<ReminderRow> {
+    let threshold = now + REMIND_ADVANCE_MS;
+
+    let mut stmt = match conn.prepare(
+        "SELECT id, text, due_date \
+         FROM todos \
+         WHERE due_date > 0 \
+           AND due_date - ?1 <= ?2 \
+           AND reminded = 0",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[LiteNote] 提醒查询 SQL 准备失败: {e}");
+            return Vec::new();
+        }
+    };
+
+    let rows = match stmt.query_map(
+        rusqlite::params![REMIND_ADVANCE_MS, threshold],
+        |row| {
+            Ok(ReminderRow {
+                id: row.get(0)?,
+                text: row.get(1)?,
+                due_date: row.get(2)?,
+            })
+        },
+    ) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[LiteNote] 提醒查询失败: {e}");
+            return Vec::new();
+        }
+    };
+
+    rows.filter_map(|r| r.ok()).collect()
+}
+
+/// 标记某条待办「本轮已提醒」，避免同一周期内重复弹
+fn mark_reminded(conn: &Connection, id: &str) {
+    if let Err(e) = conn.execute(
+        "UPDATE todos SET reminded = 1 WHERE id = ?1",
+        rusqlite::params![id],
+    ) {
+        eprintln!("[LiteNote] 标记已提醒失败 (id={}): {e}", id);
+    }
+}
+
+/// 计算窗口显示位置：屏幕右上角（钉钉式），距离右边 16px、顶部 60px
+///
+/// 拿不到 monitor 信息时退回到左上 (60, 60)。
+fn compute_reminder_position<R: Runtime>(app: &AppHandle<R>) -> (f64, f64) {
+    // 默认右上角，跨平台安全值
+    let win_w = 380.0_f64;
+    let margin_right = 16.0_f64;
+    let margin_top = 60.0_f64;
+
+    if let Ok(Some(monitor)) = app.primary_monitor() {
+        let size = monitor.size();
+        let scale = monitor.scale_factor();
+        let lw = size.width as f64 / scale;
+        // 屏幕宽减去弹窗宽再减右边距；不低于 0
+        let x = (lw - win_w - margin_right).max(0.0);
+        return (x, margin_top);
+    }
+    (60.0, 60.0)
+}
+
+/// 创建并展示一条独立提醒弹窗（置顶 / 不可被主窗口遮挡）
+fn show_reminder_window<R: Runtime>(app: &AppHandle<R>, row: &ReminderRow) {
+    let label = format!("reminder-{}", row.id);
+
+    if let Some(existing) = app.get_webview_window(&label) {
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        return;
+    }
+
+    let text_param = urlencoding_simple(&row.text);
+    let url = format!(
+        "index.html?window=reminder&todoId={}&text={}&dueDate={}",
+        urlencoding_simple(&row.id),
+        text_param,
+        row.due_date,
+    );
+
+    let (x, y) = compute_reminder_position(app);
+
+    // 直接 visible(true)，避免「先建后显」的多步操作在某些时序下窗口出不来
+    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+        .title("提醒")
+        .inner_size(380.0, 260.0)
+        .min_inner_size(380.0, 260.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)            // 配合 WebView 透明背景，彻底去掉 1px 边
+        .shadow(false)                // macOS 上不需要窗口级阴影（卡片自带 box-shadow）
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)               // 关键：首次弹出也不抢焦点，让用户主动点
+        .visible(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(TitleBarStyle::Transparent)
+            .hidden_title(true);
+    }
+
+    let result = builder.build();
+
+    match result {
+        Ok(win) => {
+            // 设置位置（macOS LogicalPosition 走 scale 自动处理）
+            let _ = win.set_position(LogicalPosition::new(x, y));
+            let _ = win.set_size(LogicalSize::new(380.0, 260.0));
+            let _ = win.show();
+            // 完全不抢焦点：
+            // - builder 上面已设 focused(false)
+            // - 这里不调 set_focus
+            // - 不调 request_user_attention（避免 Dock 弹跳 / 系统提示音）
+            //   —— 用户当前可能在写代码 / 视频会议，弹窗只是「视觉提醒」
+            //   用户主动点击弹窗即可聚焦 + 操作
+            println!("[LiteNote] 提醒弹窗已创建: label={}", label);
+        }
+        Err(e) => {
+            eprintln!("[LiteNote] 创建提醒弹窗失败: {e}");
+        }
+    }
+}
+
+/// 极简 URL 编码（不引外部 crate），仅处理中文 / 空格 / 特殊字符
+fn urlencoding_simple(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => {
+                out.push_str(&format!("%{:02X}", b));
+            }
+        }
+    }
+    out
 }
 
 /// 检查并发送到期提醒（从 Rust 端直接操作 SQLite）
@@ -223,71 +340,91 @@ fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
         .unwrap()
         .as_millis() as i64;
 
-    let threshold = now + REMIND_ADVANCE_MS;
-
-    // 1. 提醒检查
-    let rows: Vec<(String, String)> = {
-        let mut stmt = match conn.prepare(
-            "SELECT id, text FROM todos WHERE due_date > 0 AND due_date - ?1 <= ?2 AND reminded = 0",
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[LiteNote] 提醒检查：SQL 准备失败: {e}");
-                return;
-            }
-        };
-
-        let mapped = match stmt.query_map(
-            rusqlite::params![REMIND_ADVANCE_MS, threshold],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ) {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("[LiteNote] 提醒检查：查询失败: {e}");
-                return;
-            }
-        };
-
-        mapped.filter_map(|r| r.ok()).collect()
-    };
-
+    // 1. 提醒检查：开独立弹窗（不再发系统通知）
+    let rows = query_due_reminders(&conn, now);
     if !rows.is_empty() {
-        let locale = load_resolved_locale(&conn);
         println!("[LiteNote] 发现 {} 条待办需要提醒", rows.len());
-
-        for (id, text) in &rows {
-            let body = if text.is_empty() {
-                empty_todo_text(locale).to_string()
-            } else if text.len() > 40 {
-                format!("{}…", &text[..40])
-            } else {
-                text.clone()
-            };
-
-            // 发送系统通知
-            if let Err(e) = app
-                .notification()
-                .builder()
-                .title(reminder_title(locale))
-                .body(&body)
-                .show()
-            {
-                eprintln!("[LiteNote] 发送通知失败: {e}");
-                continue;
-            }
-
-            // 标记为已提醒
-            if let Err(e) = conn.execute(
-                "UPDATE todos SET reminded = 1 WHERE id = ?1",
-                rusqlite::params![id],
-            ) {
-                eprintln!("[LiteNote] 标记已提醒失败 (id={}): {e}", id);
-            }
+        for row in &rows {
+            show_reminder_window(app, row);
+            mark_reminded(&conn, &row.id);
         }
     }
 
+    // 1.5 兜底：把已经过期且没被循环推进处理掉的 todo 的 reminded 复位为 0
+    // （防止旧 reminder=1 永久卡住，导致新逻辑永远不弹）
+    let _ = conn.execute(
+        "UPDATE todos SET reminded = 0 WHERE due_date > 0 AND due_date < ?1 AND is_recurring = 0 AND completed = 0",
+        rusqlite::params![now],
+    );
+
     // 2. 循环待办自动推进
     advance_recurring_todos(&conn, now);
+}
+
+// ──────────────── 前端调用的 Tauri Commands ────────────────
+
+/// 提醒窗口中的用户操作
+/// - action = "snooze": 延后 delayMinutes 分钟，关闭弹窗
+/// - action = "close" : 仅关闭弹窗（「我知道了」/×，不修改数据）
+#[tauri::command]
+fn reminder_action(
+    app: AppHandle,
+    todo_id: String,
+    action: String,
+    delay_minutes: Option<i64>,
+) -> Result<(), String> {
+    // 找到 db 路径
+    let db_path = litenote_db_path(&app).ok_or_else(|| "无法获取数据库路径".to_string())?;
+    if !db_path.exists() {
+        return Err("数据库文件不存在".into());
+    }
+
+    let conn = Connection::open(&db_path).map_err(|e| format!("打开 DB 失败: {e}"))?;
+
+    match action.as_str() {
+        "snooze" => {
+            let delay = delay_minutes.unwrap_or(5).max(1);
+            // 在原有截止时间基础上叠加，不是从「现在」计算
+            let current_due: i64 = conn
+                .query_row(
+                    "SELECT due_date FROM todos WHERE id = ?1",
+                    rusqlite::params![todo_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            let new_due = if current_due > 0 {
+                current_due + delay * 60_000
+            } else {
+                now_ms() + delay * 60_000
+            };
+            conn.execute(
+                "UPDATE todos SET due_date = ?2, reminded = 0, update_time = ?3 WHERE id = ?1",
+                rusqlite::params![todo_id, new_due, now_ms()],
+            )
+            .map_err(|e| format!("更新失败: {e}"))?;
+        }
+        "close" => {
+            // 「我知道了」/× 关闭弹窗，标记本轮已提醒
+            conn.execute(
+                "UPDATE todos SET reminded = 1, update_time = ?2 WHERE id = ?1",
+                rusqlite::params![todo_id, now_ms()],
+            )
+            .map_err(|e| format!("更新失败: {e}"))?;
+        }
+        other => {
+            return Err(format!("未知 action: {other}"));
+        }
+    }
+
+    // 让前端自己 close 窗口，Rust 不动（避免 macOS 唤起主窗口）
+    Ok(())
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
 }
 
 /// 启动 Rust 端后台提醒轮询（独立于前端，确保 macOS 上窗口隐藏时也能可靠提醒）
@@ -367,9 +504,9 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![reminder_action])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

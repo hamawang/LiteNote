@@ -220,7 +220,13 @@ export const useTodoStore = create<TodoStoreState & TodoStoreActions>()(
       set((s) => ({
         todos: s.todos.map((x) =>
           x.id === id
-            ? ((updated = { ...x, dueDate, updateTime: now }), updated)
+            ? ((updated = {
+                ...x,
+                dueDate,
+                updateTime: now,
+                // 重新设置截止时间后，进入新一轮提醒窗口，清空 reminded
+                reminded: false,
+              }), updated)
             : x,
         ),
       }));

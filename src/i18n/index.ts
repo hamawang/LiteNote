@@ -15,7 +15,21 @@ export function resolveLocale(mode: LocaleMode): Locale {
   return mode;
 }
 
-export function t(locale: Locale, key: MessageKey): string {
-  const pack = messages[locale];
-  return pack[key] ?? String(key);
+/**
+ * 查表并做简单占位符替换：
+ *   "还有 {time} 到期" + { time: "5m" } => "还有 5m 到期"
+ *
+ * 若未提供占位符值，则原样保留 `{xxx}`。
+ */
+export function t(
+  locale: Locale,
+  key: MessageKey,
+  vars?: Record<string, string | number>,
+): string {
+  const raw = messages[locale][key] ?? String(key);
+  if (!vars) return raw;
+  return raw.replace(/\{(\w+)\}/g, (_, k: string) => {
+    const v = vars[k];
+    return v === undefined || v === null ? `{${k}}` : String(v);
+  });
 }
