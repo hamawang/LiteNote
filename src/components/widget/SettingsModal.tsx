@@ -239,35 +239,37 @@ export function SettingsModal({
         </div>
 
         {/* 外观 */}
-        <section className="mb-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <span style={{ color: "var(--ln-theme-text)" }} className="text-sm">{mk("opacityLabel")}</span>
-            <span className="text-xs w-8 text-right" style={{ color: "var(--ln-theme-text-secondary)" }}>
+        <section className="mb-5">
+          <div className="flex items-center gap-3">
+            <span style={{ color: "var(--ln-theme-text)", whiteSpace: "nowrap" }} className="text-sm shrink-0">
+              {mk("opacityLabel")}
+            </span>
+            <input
+              type="range"
+              min={15}
+              max={100}
+              value={Math.round(panelOpacity * 100)}
+              onChange={(e) => onPanelOpacityChange(Number(e.target.value) / 100)}
+              className="flex-1 h-5 rounded-full appearance-none cursor-pointer bg-transparent"
+              style={{
+                WebkitAppearance: "none",
+                appearance: "none" as React.CSSProperties["appearance"],
+              }}
+            />
+            <span className="text-xs w-8 text-right shrink-0" style={{ color: "var(--ln-theme-text-secondary)" }}>
               {Math.round(panelOpacity * 100)}%
             </span>
           </div>
-          <input
-            type="range"
-            min={15}
-            max={100}
-            value={Math.round(panelOpacity * 100)}
-            onChange={(e) => onPanelOpacityChange(Number(e.target.value) / 100)}
-            className="w-full h-6 rounded-full appearance-none cursor-pointer bg-transparent"
-            style={{
-              WebkitAppearance: "none",
-              appearance: "none" as React.CSSProperties["appearance"],
-            }}
-          />
           <style>{`
             input[type="range"]::-webkit-slider-runnable-track {
-              height: 6px;
+              height: 4px;
               border-radius: 999px;
               background: var(--ln-theme-text-muted);
             }
             input[type="range"]::-webkit-slider-thumb {
               -webkit-appearance: none;
-              width: 16px;
-              height: 16px;
+              width: 14px;
+              height: 14px;
               border-radius: 50%;
               background: white;
               margin-top: -5px;
@@ -275,13 +277,13 @@ export function SettingsModal({
               cursor: pointer;
             }
             input[type="range"]::-moz-range-track {
-              height: 6px;
+              height: 4px;
               border-radius: 999px;
               background: var(--ln-theme-text-muted);
             }
             input[type="range"]::-moz-range-thumb {
-              width: 16px;
-              height: 16px;
+              width: 14px;
+              height: 14px;
               border-radius: 50%;
               background: white;
               border: none;
