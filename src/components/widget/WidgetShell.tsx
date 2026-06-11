@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   DndContext,
@@ -163,7 +164,8 @@ export function WidgetShell() {
 
   const handleHide = useCallback(async () => {
     try {
-      await getCurrentWindow().hide();
+      // 通过 Rust 命令隐藏：先保存窗口状态再隐藏
+      await invoke("hide_main_window");
     } catch {
       /* 非 Tauri */
     }

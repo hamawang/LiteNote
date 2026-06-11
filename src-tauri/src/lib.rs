@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{Datelike, TimeDelta, Timelike, Months, NaiveDate, DateTime};
@@ -7,12 +9,13 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, LogicalPosition, Manager, Runtime, WebviewUrl,
-    WebviewWindowBuilder,
+    WebviewWindowBuilder, WindowEvent,
 };
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, TitleBarStyle};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// 提醒提前量（毫秒），默认 15 分钟
 const REMIND_ADVANCE_MS: i64 = 15 * 60 * 1000;
@@ -524,6 +527,16 @@ fn reminder_action(
     Ok(())
 }
 
+/// 前端隐藏窗口时调用：保存窗口状态再隐藏
+#[tauri::command]
+fn hide_main_window(app: AppHandle) -> Result<(), String> {
+    app.save_window_state(StateFlags::all()).map_err(|e| format!("保存窗口状态失败: {e}"))?;
+    if let Some(w) = app.get_webview_window("main") {
+        w.hide().map_err(|e| format!("隐藏窗口失败: {e}"))?;
+    }
+    Ok(())
+}
+
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -595,6 +608,8 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(w) = app.get_webview_window("main") {
         if let Ok(visible) = w.is_visible() {
             if visible {
+                // 隐藏前保存窗口状态（位置 + 大小）
+                let _ = app.save_window_state(StateFlags::all());
                 let _ = w.hide();
             } else {
                 let _ = w.show();
@@ -608,7 +623,7 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![reminder_action])
+        .invoke_handler(tauri::generate_handler![reminder_action, hide_main_window])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -633,6 +648,27 @@ pub fn run() {
                     // 设置窗口背景色为透明
                     let _ = window.set_background_color(Some(tauri::utils::config::Color(0, 0, 0, 0)));
                 }
+            }
+
+            // 监听主窗口 resize，去抖保存窗口状态（避免高频 I/O）
+            if let Some(window) = app.get_webview_window("main") {
+                let debounce = Arc::new(AtomicBool::new(false));
+                let h = app.handle().clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::Resized(_) = event {
+                        // AtomicBool 防重入：已有排队中的保存任务则跳过
+                        if debounce.swap(true, Ordering::SeqCst) {
+                            return;
+                        }
+                        let h = h.clone();
+                        let d = debounce.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(500));
+                            let _ = h.save_window_state(StateFlags::all());
+                            d.store(false, Ordering::SeqCst);
+                        });
+                    }
+                });
             }
 
             let show_i =
