@@ -461,13 +461,6 @@ fn check_and_notify(app: &AppHandle, db_path: &std::path::Path) {
         }
     }
 
-    // 1.5 兜底：把已经过期且没被循环推进处理掉的 todo 的 reminded 复位为 0
-    // （防止旧 reminder=1 永久卡住，导致新逻辑永远不弹）
-    let _ = conn.execute(
-        "UPDATE todos SET reminded = 0 WHERE due_date > 0 AND due_date < ?1 AND is_recurring = 0 AND completed = 0",
-        rusqlite::params![now],
-    );
-
     // 2. 循环待办自动推进
     advance_recurring_todos(&conn, now);
 }
