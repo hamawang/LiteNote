@@ -18,6 +18,7 @@ import {
 import { resolveLocale, t } from "@/i18n";
 import { AboutModal } from "./AboutModal";
 import { useWidgetActions } from "@/hooks/useWidgetActions";
+import { useFocusWindowSize } from "@/hooks/useFocusWindowSize";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTodoStore } from "@/stores/todoStore";
 import type { TodoColorId } from "@/types/todo";
@@ -32,6 +33,7 @@ import { SettingsModal } from "./SettingsModal";
 import { TodoContextMenu } from "./TodoContextMenu";
 import { TodoList } from "./TodoList";
 import { WeekCalendar } from "./WeekCalendar";
+import { FocusDragHandle } from "./FocusDragHandle";
 
 /** 获取指定时间戳当天的开始时间（00:00:00） */
 function startOfDay(ts: number): number {
@@ -60,6 +62,8 @@ export function WidgetShell() {
   const setTheme = useSettingsStore((s) => s.setTheme);
   const reminderMode = useSettingsStore((s) => s.reminderMode);
   const setReminderMode = useSettingsStore((s) => s.setReminderMode);
+  const focusMode = useSettingsStore((s) => s.focusMode);
+  const settingsInitialized = useSettingsStore((s) => s.initialized);
   const lastSettingsError = useSettingsStore((s) => s.lastError);
   const clearSettingsError = useSettingsStore((s) => s.clearError);
   const lastTodoError = useTodoStore((s) => s.lastError);
@@ -102,6 +106,20 @@ export function WidgetShell() {
 
   const locale = useMemo(() => resolveLocale(localeMode), [localeMode]);
 
+  const noop = useCallback(() => {}, []);
+  const noopContextMenu = useCallback((_e: React.MouseEvent, _id: string) => {}, []);
+  const noopChangeText = useCallback((_id: string, _text: string) => {}, []);
+
+  const panelStyle = useMemo(
+    () => ({
+      opacity: panelOpacity,
+      background: "var(--ln-theme-bg)",
+      backdropFilter: "var(--ln-theme-backdrop)",
+      WebkitBackdropFilter: "var(--ln-theme-backdrop)",
+    }),
+    [panelOpacity],
+  );
+
   const {
     todos,
     completedCount,
@@ -131,6 +149,20 @@ export function WidgetShell() {
     reorderTodos,
     menuActions,
   } = useWidgetActions(locale);
+
+  const focusActiveTodos = useMemo(
+    () => todos.filter((t) => !t.completed),
+    [todos],
+  );
+
+  useFocusWindowSize(focusMode, focusActiveTodos.length, settingsInitialized);
+
+  // 进入专注模式时关闭编辑态与右键菜单
+  useEffect(() => {
+    if (!focusMode) return;
+    setMenu(null);
+    handleEndEdit();
+  }, [focusMode, setMenu, handleEndEdit]);
 
   // 当前拖拽中的待办 id（用于 DragOverlay）
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -239,14 +271,30 @@ export function WidgetShell() {
         </div>
       ) : null}
 
+      {focusMode ? (
+        <div
+          className="flex h-full min-h-0 w-full flex-col overflow-hidden"
+          style={panelStyle}
+        >
+          <FocusDragHandle />
+          <TodoList
+            focusMode
+            locale={locale}
+            todos={focusActiveTodos}
+            selectedId={null}
+            editingId={null}
+            emptyHint={`${t(locale, "focusEmptyHint")}\n${t(locale, "focusModeHint")}`}
+            onSelect={noop}
+            onContextMenu={noopContextMenu}
+            onChangeText={noopChangeText}
+            onEndEdit={noop}
+            onToggleCompleted={toggleCompleted}
+          />
+        </div>
+      ) : (
       <div
         className="flex h-full min-h-0 w-full flex-col overflow-hidden"
-        style={{
-          opacity: panelOpacity,
-          background: "var(--ln-theme-bg)",
-          backdropFilter: "var(--ln-theme-backdrop)",
-          WebkitBackdropFilter: "var(--ln-theme-backdrop)",
-        }}
+        style={panelStyle}
       >
         <HeaderBar
           locale={locale}
@@ -335,8 +383,9 @@ export function WidgetShell() {
           onClose={() => setShowAbout(false)}
         />
       </div>
+      )}
 
-      {menu && menuTodo ? (
+      {!focusMode && menu && menuTodo ? (
         <TodoContextMenu
           locale={locale}
           x={menu.x}
@@ -358,6 +407,8 @@ export function WidgetShell() {
         />
       ) : null}
 
+      {!focusMode ? (
+      <>
       <DueDatePicker
         locale={locale}
         open={dueDatePickerFor !== null}
@@ -392,6 +443,8 @@ export function WidgetShell() {
         onCancel={() => setConfirmDeleteId(null)}
         onConfirm={handleDeleteOne}
       />
+      </>
+      ) : null}
     </>
   );
 }

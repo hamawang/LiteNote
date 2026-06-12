@@ -14,6 +14,8 @@ interface TodoRowProps {
   locale: Locale;
   selected: boolean;
   editing: boolean;
+  /** 专注模式：仅展示 + 勾选，无编辑/拖拽/右键 */
+  focusMode?: boolean;
   onSelect: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onChangeText: (text: string) => void;
@@ -21,7 +23,86 @@ interface TodoRowProps {
   onToggleCompleted: () => void;
 }
 
-export function TodoRow({
+export function TodoRow(props: TodoRowProps) {
+  if (props.focusMode) {
+    return (
+      <FocusTodoRow
+        todo={props.todo}
+        locale={props.locale}
+        onToggleCompleted={props.onToggleCompleted}
+      />
+    );
+  }
+  return <ManagementTodoRow {...props} />;
+}
+
+function FocusTodoRow({
+  todo,
+  locale,
+  onToggleCompleted,
+}: {
+  todo: TodoItem;
+  locale: Locale;
+  onToggleCompleted: () => void;
+}) {
+  const accent = COLOR_DOT_STYLE[todo.colorId].background;
+
+  return (
+    <div
+      data-tauri-no-drag
+      className="flex min-h-12 cursor-default items-center gap-1 px-2 sm:px-3"
+      style={{ borderBottom: `1px solid var(--ln-theme-border-light)` }}
+    >
+      {todo.isRecurring ? (
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center text-xs"
+          title={locale === "zh-CN" ? "循环待办" : "Recurring"}
+          style={{ color: accent }}
+        >
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="1 4 1 10 7 10" />
+            <polyline points="23 20 23 14 17 14" />
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+          </svg>
+        </span>
+      ) : (
+        <button
+          type="button"
+          data-tauri-no-drag
+          aria-label={t(locale, "menuDone")}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-white/50"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCompleted();
+          }}
+        >
+          <span
+            className="flex h-[0.875rem] w-[0.875rem] items-center justify-center rounded-full border bg-transparent"
+            style={{ borderColor: accent }}
+          />
+        </button>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col py-2">
+        <span
+          className="whitespace-pre-wrap text-sm leading-snug"
+          style={{ color: "var(--ln-theme-text)" }}
+        >
+          {todo.text || (locale === "zh-CN" ? "（空）" : "(empty)")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ManagementTodoRow({
   todo,
   locale,
   selected,
@@ -31,7 +112,7 @@ export function TodoRow({
   onChangeText,
   onEndEdit,
   onToggleCompleted,
-}: TodoRowProps) {
+}: Omit<TodoRowProps, "focusMode">) {
   const accent = COLOR_DOT_STYLE[todo.colorId].background;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 

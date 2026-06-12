@@ -4,9 +4,9 @@ use chrono::{Datelike, TimeDelta, Timelike, Months, NaiveDate, DateTime};
 use rusqlite::Connection;
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, LogicalPosition, Manager, Runtime, WebviewUrl,
+    AppHandle, Emitter, LogicalPosition, Manager, Runtime, WebviewUrl,
     WebviewWindowBuilder,
 };
 #[cfg(target_os = "macos")]
@@ -25,6 +25,8 @@ const REMINDER_POLL_INTERVAL_SECS: u64 = 30;
 fn window_persist_flags() -> StateFlags {
     StateFlags::SIZE | StateFlags::POSITION | StateFlags::VISIBLE
 }
+
+const SETTINGS_UPDATED_EVENT: &str = "litenote-settings-updated";
 
 /// 循环待办：根据当前截止时间和规则计算下一次截止时间戳
 fn compute_next_due(current_due_ms: i64, recurrence_type: &str, config: &str) -> Option<i64> {
@@ -154,7 +156,7 @@ fn advance_recurring_todos(conn: &Connection, now_ms: i64) {
 }
 
 /// 与前端 `tauri-plugin-sql` 一致：数据库位于 app_config_dir/litenote.db
-fn litenote_db_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+fn litenote_db_path<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
     app.path()
         .app_config_dir()
         .ok()
@@ -303,6 +305,103 @@ fn read_reminder_mode(conn: &Connection) -> String {
         |row| row.get::<_, String>(0),
     )
     .unwrap_or_else(|_| "popup".to_string())
+}
+
+fn read_setting_bool(conn: &Connection, key: &str, default: bool) -> bool {
+    let has_table: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='settings' LIMIT 1",
+            [],
+            |_| Ok(()),
+        )
+        .is_ok();
+    if !has_table {
+        return default;
+    }
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        [key],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|v| serde_json::from_str::<bool>(&v).ok())
+    .unwrap_or(default)
+}
+
+fn write_setting_bool<R: Runtime>(app: &AppHandle<R>, key: &str, value: bool) -> Result<(), String> {
+    let db_path = litenote_db_path(app).ok_or_else(|| "无法获取数据库路径".to_string())?;
+    let conn = Connection::open(&db_path).map_err(|e| format!("打开 DB 失败: {e}"))?;
+    let json = if value { "true" } else { "false" };
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        rusqlite::params![key, json],
+    )
+    .map_err(|e| format!("写入设置失败: {e}"))?;
+    Ok(())
+}
+
+fn read_focus_mode<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let Some(db_path) = litenote_db_path(app) else {
+        return false;
+    };
+    if !db_path.exists() {
+        return false;
+    }
+    let Ok(conn) = Connection::open(&db_path) else {
+        return false;
+    };
+    read_setting_bool(&conn, "focusMode", false)
+}
+
+fn build_tray_menu<R: Runtime>(app: &AppHandle<R>, focus_mode: bool) -> tauri::Result<Menu<R>> {
+    let show_i = MenuItem::with_id(app, "tray_show", "显示窗口", true, None::<&str>)?;
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    let focus_i = CheckMenuItem::with_id(
+        app,
+        "tray_mode_focus",
+        "专注模式",
+        true,
+        focus_mode,
+        None::<&str>,
+    )?;
+    let manage_i = CheckMenuItem::with_id(
+        app,
+        "tray_mode_manage",
+        "完整模式",
+        true,
+        !focus_mode,
+        None::<&str>,
+    )?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let quit_i = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
+    Menu::with_items(
+        app,
+        &[&show_i, &sep1, &focus_i, &manage_i, &sep2, &quit_i],
+    )
+}
+
+fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let focus_mode = read_focus_mode(app);
+    let menu = build_tray_menu(app, focus_mode)?;
+    if let Some(tray) = app.tray_by_id("litenote-tray") {
+        tray.set_menu(Some(menu))?;
+    }
+    Ok(())
+}
+
+fn apply_focus_mode<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), String> {
+    write_setting_bool(app, "focusMode", enabled)?;
+    rebuild_tray_menu(app).map_err(|e| format!("更新托盘菜单失败: {e}"))?;
+    app.emit(
+        SETTINGS_UPDATED_EVENT,
+        serde_json::json!({ "ts": now_ms(), "source": "rust" }),
+    )
+    .map_err(|e| format!("通知前端失败: {e}"))?;
+    Ok(())
+}
+
+fn toggle_focus_mode<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    apply_focus_mode(app, !read_focus_mode(app))
 }
 
 /// 创建并展示一条独立提醒弹窗（置顶 / 不可被主窗口遮挡）
@@ -531,11 +630,23 @@ fn reminder_action(
 /// 前端隐藏窗口时调用：保存窗口状态再隐藏
 #[tauri::command]
 fn hide_main_window(app: AppHandle) -> Result<(), String> {
-    app.save_window_state(window_persist_flags()).map_err(|e| format!("保存窗口状态失败: {e}"))?;
+    let flags = if read_focus_mode(&app) {
+        // 专注模式不写 SIZE，避免下次完整模式恢复到矮窗口
+        StateFlags::POSITION | StateFlags::VISIBLE
+    } else {
+        window_persist_flags()
+    };
+    app.save_window_state(flags).map_err(|e| format!("保存窗口状态失败: {e}"))?;
     if let Some(w) = app.get_webview_window("main") {
         w.hide().map_err(|e| format!("隐藏窗口失败: {e}"))?;
     }
     Ok(())
+}
+
+/// 切换专注 / 完整模式（托盘、快捷键、前端均可调用）
+#[tauri::command]
+fn set_focus_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
+    apply_focus_mode(&app, enabled)
 }
 
 fn now_ms() -> i64 {
@@ -609,8 +720,13 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(w) = app.get_webview_window("main") {
         if let Ok(visible) = w.is_visible() {
             if visible {
-                // 隐藏前保存窗口状态（位置 + 大小）
-                let _ = app.save_window_state(window_persist_flags());
+                // 隐藏前保存窗口状态（位置 + 大小；专注模式不写 SIZE）
+                let flags = if read_focus_mode(app) {
+                    StateFlags::POSITION | StateFlags::VISIBLE
+                } else {
+                    window_persist_flags()
+                };
+                let _ = app.save_window_state(flags);
                 let _ = w.hide();
             } else {
                 let _ = w.show();
@@ -624,7 +740,7 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![reminder_action, hide_main_window])
+        .invoke_handler(tauri::generate_handler![reminder_action, hide_main_window, set_focus_mode])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -668,10 +784,8 @@ pub fn run() {
                 }
             }
 
-            let show_i =
-                MenuItem::with_id(app, "tray_show", "显示窗口", true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+            let focus_mode = read_focus_mode(app.handle());
+            let menu = build_tray_menu(app.handle(), focus_mode)?;
 
             let _tray = TrayIconBuilder::with_id("litenote-tray")
                 .icon(icon)
@@ -684,6 +798,12 @@ pub fn run() {
                     }
                     "tray_show" => {
                         show_main_window(app);
+                    }
+                    "tray_mode_focus" => {
+                        let _ = apply_focus_mode(app, true);
+                    }
+                    "tray_mode_manage" => {
+                        let _ = apply_focus_mode(app, false);
                     }
                     _ => {}
                 })
@@ -718,6 +838,16 @@ pub fn run() {
                 move |_app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
                         toggle_main_window(&shortcut_handle);
+                    }
+                },
+            )?;
+
+            // 全局快捷键：CmdOrCtrl+Shift+F 切换专注 / 完整模式
+            app.global_shortcut().on_shortcut(
+                "CmdOrCtrl+Shift+F",
+                move |app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = toggle_focus_mode(app);
                     }
                 },
             )?;

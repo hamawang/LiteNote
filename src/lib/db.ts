@@ -22,6 +22,9 @@ export const DEFAULT_SETTINGS = {
   autoStart: true,
   theme: "glass" as ThemeId,
   reminderMode: "popup" as "popup" | "system",
+  focusMode: false,
+  fullWindowWidth: 360,
+  fullWindowHeight: 620,
 };
 
 /** 设置项的运行时类型（非字面量） */
@@ -33,6 +36,9 @@ export interface AppSettings {
   readonly autoStart: boolean;
   readonly theme: ThemeId;
   readonly reminderMode: "popup" | "system";
+  readonly focusMode: boolean;
+  readonly fullWindowWidth: number;
+  readonly fullWindowHeight: number;
 }
 
 export async function getDb(): Promise<Database> {

@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { LocaleMode } from "@/i18n";
 import {
@@ -17,6 +18,9 @@ export interface SettingsState {
   autoStart: boolean;
   theme: ThemeId;
   reminderMode: "popup" | "system";
+  focusMode: boolean;
+  fullWindowWidth: number;
+  fullWindowHeight: number;
   initialized: boolean;
   /** 最近一次 DB 写入错误信息，供 UI 展示 */
   lastError: string | null;
@@ -31,6 +35,7 @@ export interface SettingsActions {
   setAutoStart: (v: boolean) => void;
   setTheme: (t: ThemeId) => void;
   setReminderMode: (m: "popup" | "system") => void;
+  setFocusMode: (v: boolean) => void;
   /** 供外部同步调用：用 DB 最新值覆盖 store */
   reloadFromDb: () => Promise<void>;
   clearError: () => void;
@@ -173,6 +178,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
         emitSettingsChanged,
       );
     },
+
+    setFocusMode: (v) => {
+      set({ focusMode: v });
+      invoke("set_focus_mode", { enabled: v }).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        set({ lastError: `切换模式失败: ${msg}` });
+        void useSettingsStore.getState().reloadFromDb();
+      });
+    },
   }),
 );
 
@@ -203,7 +217,7 @@ function emitSettingsChanged(): void {
 async function shouldReloadFromSettingsEvent(
   payload: SettingsUpdatedPayload,
 ): Promise<boolean> {
-  if (!payload.source) return true;
+  if (!payload.source || payload.source === "rust") return true;
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     return getCurrentWindow().label !== payload.source;

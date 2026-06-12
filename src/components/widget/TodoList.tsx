@@ -13,12 +13,18 @@ function withCount(template: string, n: number): string {
   return template.replace(/\{n\}/g, String(n));
 }
 
+const emptyCenter =
+  "flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-6 text-center text-sm";
+const emptyStyle = { color: "var(--ln-theme-text-secondary)" } as React.CSSProperties;
+
 interface TodoListProps {
   locale: Locale;
   todos: TodoItem[];
   selectedId: string | null;
   editingId: string | null;
   emptyHint: string;
+  /** 专注模式：仅未完成、只读列表 */
+  focusMode?: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onChangeText: (id: string, text: string) => void;
@@ -32,6 +38,7 @@ export function TodoList({
   selectedId,
   editingId,
   emptyHint,
+  focusMode = false,
   onSelect,
   onContextMenu,
   onChangeText,
@@ -50,16 +57,13 @@ export function TodoList({
     };
   }, [todos]);
 
-  const emptyCenter =
-    "flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-6 text-center text-sm";
-const emptyStyle = { color: "var(--ln-theme-text-secondary)" } as React.CSSProperties;
-
   const renderRows = (list: TodoItem[]) =>
     list.map((todo) => (
       <TodoRow
         key={todo.id}
         todo={todo}
         locale={locale}
+        focusMode={focusMode}
         selected={todo.id === selectedId}
         editing={todo.id === editingId}
         onSelect={() => onSelect(todo.id)}
@@ -69,6 +73,25 @@ const emptyStyle = { color: "var(--ln-theme-text-secondary)" } as React.CSSPrope
         onToggleCompleted={() => onToggleCompleted(todo.id)}
       />
     ));
+
+  if (focusMode) {
+    if (activeSorted.length === 0) {
+      return (
+        <div
+          className={`${emptyCenter} min-h-0 flex-1 whitespace-pre-line`}
+          style={emptyStyle}
+        >
+          {emptyHint}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto">{renderRows(activeSorted)}</div>
+      </div>
+    );
+  }
 
   if (todos.length === 0) {
     return (
