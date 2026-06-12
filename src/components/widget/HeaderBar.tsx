@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import type { Locale } from "@/i18n";
 import type { MessageKey } from "@/i18n/messages";
 import { t } from "@/i18n";
+import { Icon } from "@/components/Icon";
 
 interface HeaderBarProps {
   locale: Locale;
@@ -98,25 +99,7 @@ export function HeaderBar({
           aria-pressed={alwaysOnTop}
           onClick={onToggleAlwaysOnTop}
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
-            <rect
-              x="5"
-              y="11"
-              width="14"
-              height="9"
-              rx="1.5"
-              fill={alwaysOnTop ? "currentColor" : "none"}
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M8 11V7a4 4 0 0 1 8 0v4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
+          <Icon name={alwaysOnTop ? "pushpin-fill" : "pushpin-line"} />
         </button>
         <button type="button" className={iconBtn} style={iconStyle} title={mk("hideWindow")} onClick={onHide}>
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
