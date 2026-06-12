@@ -1,5 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{Datelike, TimeDelta, Timelike, Months, NaiveDate, DateTime};
@@ -9,10 +7,10 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, LogicalPosition, Manager, Runtime, WebviewUrl,
-    WebviewWindowBuilder, WindowEvent,
+    WebviewWindowBuilder,
 };
 #[cfg(target_os = "macos")]
-use tauri::{RunEvent, TitleBarStyle};
+use tauri::{ActivationPolicy, RunEvent, TitleBarStyle};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
@@ -22,6 +20,11 @@ const REMIND_ADVANCE_MS: i64 = 15 * 60 * 1000;
 
 /// 背景提醒轮询间隔
 const REMINDER_POLL_INTERVAL_SECS: u64 = 30;
+
+/// 持久化窗口位置/大小/可见性（不含最大化，避免无边框窗口 resize 时死锁）
+fn window_persist_flags() -> StateFlags {
+    StateFlags::SIZE | StateFlags::POSITION | StateFlags::VISIBLE
+}
 
 /// 循环待办：根据当前截止时间和规则计算下一次截止时间戳
 fn compute_next_due(current_due_ms: i64, recurrence_type: &str, config: &str) -> Option<i64> {
@@ -323,7 +326,7 @@ fn show_reminder_window<R: Runtime>(app: &AppHandle<R>, row: &ReminderRow) {
     let (x, y) = compute_reminder_position(app);
 
     // 先以不可见方式创建，避免 build() 时窗口管理器将其放到屏幕中央
-    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
         .title("提醒")
         .inner_size(380.0, 160.0)
         .resizable(false)
@@ -332,15 +335,14 @@ fn show_reminder_window<R: Runtime>(app: &AppHandle<R>, row: &ReminderRow) {
         .shadow(false)                // 卡片自带 box-shadow，不需要窗口级阴影
         .always_on_top(true)
         .skip_taskbar(true)
+        .maximizable(false)
         .focused(false)               // 关键：首次弹出也不抢焦点，让用户主动点
         .visible(false);              // 先不可见，设好位置后再显示
 
     #[cfg(target_os = "macos")]
-    {
-        builder = builder
-            .title_bar_style(TitleBarStyle::Transparent)
-            .hidden_title(true);
-    }
+    let builder = builder
+        .title_bar_style(TitleBarStyle::Transparent)
+        .hidden_title(true);
 
     let result = builder.build();
 
@@ -352,14 +354,13 @@ fn show_reminder_window<R: Runtime>(app: &AppHandle<R>, row: &ReminderRow) {
             // 针对不同系统进行「不抢焦点」的显示
             #[cfg(target_os = "windows")]
             {
-                use tauri::Manager;
                 if let Ok(hwnd) = win.hwnd() {
                     unsafe {
                         // SW_SHOWNOACTIVATE = 4 : 显示但不激活
                         extern "system" {
                             fn ShowWindow(hwnd: isize, nCmdShow: i32) -> i32;
                         }
-                        ShowWindow(hwnd.0, 4);
+                        ShowWindow(hwnd.0 as isize, 4);
                     }
                 } else {
                     let _ = win.show();
@@ -530,7 +531,7 @@ fn reminder_action(
 /// 前端隐藏窗口时调用：保存窗口状态再隐藏
 #[tauri::command]
 fn hide_main_window(app: AppHandle) -> Result<(), String> {
-    app.save_window_state(StateFlags::all()).map_err(|e| format!("保存窗口状态失败: {e}"))?;
+    app.save_window_state(window_persist_flags()).map_err(|e| format!("保存窗口状态失败: {e}"))?;
     if let Some(w) = app.get_webview_window("main") {
         w.hide().map_err(|e| format!("隐藏窗口失败: {e}"))?;
     }
@@ -609,7 +610,7 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
         if let Ok(visible) = w.is_visible() {
             if visible {
                 // 隐藏前保存窗口状态（位置 + 大小）
-                let _ = app.save_window_state(StateFlags::all());
+                let _ = app.save_window_state(window_persist_flags());
                 let _ = w.hide();
             } else {
                 let _ = w.show();
@@ -630,12 +631,29 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(window_persist_flags())
+                .build(),
+        )
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
         .setup(|app| {
+            // 小部件模式：Windows 不在任务栏显示；macOS 不在 Dock 显示（仅托盘）
+            #[cfg(target_os = "windows")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_skip_taskbar(true);
+            }
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_maximizable(false);
+            }
+
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(ActivationPolicy::Accessory);
+
             let handle = app.handle().clone();
             let icon = tray_image(&handle);
 
@@ -648,27 +666,6 @@ pub fn run() {
                     // 设置窗口背景色为透明
                     let _ = window.set_background_color(Some(tauri::utils::config::Color(0, 0, 0, 0)));
                 }
-            }
-
-            // 监听主窗口 resize，去抖保存窗口状态（避免高频 I/O）
-            if let Some(window) = app.get_webview_window("main") {
-                let debounce = Arc::new(AtomicBool::new(false));
-                let h = app.handle().clone();
-                window.on_window_event(move |event| {
-                    if let WindowEvent::Resized(_) = event {
-                        // AtomicBool 防重入：已有排队中的保存任务则跳过
-                        if debounce.swap(true, Ordering::SeqCst) {
-                            return;
-                        }
-                        let h = h.clone();
-                        let d = debounce.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(Duration::from_millis(500));
-                            let _ = h.save_window_state(StateFlags::all());
-                            d.store(false, Ordering::SeqCst);
-                        });
-                    }
-                });
             }
 
             let show_i =

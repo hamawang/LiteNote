@@ -241,7 +241,6 @@ export function WidgetShell() {
 
       <div
         className="flex h-full min-h-0 w-full flex-col overflow-hidden"
-        data-tauri-drag-region
         style={{
           opacity: panelOpacity,
           background: "var(--ln-theme-bg)",

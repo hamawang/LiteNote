@@ -18,7 +18,9 @@
         "height": 620,
         "decorations": false,
         "transparent": true,
-        "shadow": false
+        "shadow": false,
+        "skipTaskbar": true,
+        "maximizable": false
       }
     ],
     "security": {

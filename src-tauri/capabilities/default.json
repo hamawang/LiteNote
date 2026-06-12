@@ -16,6 +16,8 @@
     "core:window:allow-set-size",
     "core:window:allow-unminimize",
     "core:window:allow-request-user-attention",
+    "core:window:deny-toggle-maximize",
+    "core:window:deny-internal-toggle-maximize",
     "core:webview:allow-create-webview-window",
     "opener:default",
     "sql:default",
