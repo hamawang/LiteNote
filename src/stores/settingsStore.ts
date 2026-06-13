@@ -132,12 +132,11 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
 
     setAlwaysOnTop: (v) => {
       set({ alwaysOnTop: v });
-      dbWrite(
-        saveSetting("alwaysOnTop", v),
-        "saveSetting(alwaysOnTop)",
-        (msg) => set({ lastError: msg }),
-        emitSettingsChanged,
-      );
+      invoke("set_always_on_top", { enabled: v }).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        set({ lastError: `设置置顶失败: ${msg}` });
+        void useSettingsStore.getState().reloadFromDb();
+      });
     },
 
     setAutoStart: (v) => {

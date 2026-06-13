@@ -353,7 +353,24 @@ fn read_focus_mode<R: Runtime>(app: &AppHandle<R>) -> bool {
     read_setting_bool(&conn, "focusMode", false)
 }
 
-fn build_tray_menu<R: Runtime>(app: &AppHandle<R>, focus_mode: bool) -> tauri::Result<Menu<R>> {
+fn read_always_on_top<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let Some(db_path) = litenote_db_path(app) else {
+        return false;
+    };
+    if !db_path.exists() {
+        return false;
+    }
+    let Ok(conn) = Connection::open(&db_path) else {
+        return false;
+    };
+    read_setting_bool(&conn, "alwaysOnTop", false)
+}
+
+fn build_tray_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    focus_mode: bool,
+    always_on_top: bool,
+) -> tauri::Result<Menu<R>> {
     let show_i = MenuItem::with_id(app, "tray_show", "显示窗口", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let focus_i = CheckMenuItem::with_id(
@@ -372,17 +389,26 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>, focus_mode: bool) -> tauri::R
         !focus_mode,
         None::<&str>,
     )?;
+    let pin_i = CheckMenuItem::with_id(
+        app,
+        "tray_always_on_top",
+        "窗口置顶",
+        true,
+        always_on_top,
+        None::<&str>,
+    )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit_i = MenuItem::with_id(app, "tray_quit", "退出", true, None::<&str>)?;
     Menu::with_items(
         app,
-        &[&show_i, &sep1, &focus_i, &manage_i, &sep2, &quit_i],
+        &[&show_i, &sep1, &focus_i, &manage_i, &pin_i, &sep2, &quit_i],
     )
 }
 
 fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let focus_mode = read_focus_mode(app);
-    let menu = build_tray_menu(app, focus_mode)?;
+    let always_on_top = read_always_on_top(app);
+    let menu = build_tray_menu(app, focus_mode, always_on_top)?;
     if let Some(tray) = app.tray_by_id("litenote-tray") {
         tray.set_menu(Some(menu))?;
     }
@@ -402,6 +428,24 @@ fn apply_focus_mode<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(),
 
 fn toggle_focus_mode<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     apply_focus_mode(app, !read_focus_mode(app))
+}
+
+fn apply_always_on_top<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), String> {
+    write_setting_bool(app, "alwaysOnTop", enabled)?;
+    if let Some(w) = app.get_webview_window("main") {
+        w.set_always_on_top(enabled).map_err(|e| format!("设置置顶失败: {e}"))?;
+    }
+    rebuild_tray_menu(app).map_err(|e| format!("更新托盘菜单失败: {e}"))?;
+    app.emit(
+        SETTINGS_UPDATED_EVENT,
+        serde_json::json!({ "ts": now_ms(), "source": "rust" }),
+    )
+    .map_err(|e| format!("通知前端失败: {e}"))?;
+    Ok(())
+}
+
+fn toggle_always_on_top<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    apply_always_on_top(app, !read_always_on_top(app))
 }
 
 /// 创建并展示一条独立提醒弹窗（置顶 / 不可被主窗口遮挡）
@@ -649,6 +693,12 @@ fn set_focus_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
     apply_focus_mode(&app, enabled)
 }
 
+/// 设置窗口置顶（托盘、快捷键、前端均可调用）
+#[tauri::command]
+fn set_always_on_top(app: AppHandle, enabled: bool) -> Result<(), String> {
+    apply_always_on_top(&app, enabled)
+}
+
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -740,7 +790,12 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![reminder_action, hide_main_window, set_focus_mode])
+        .invoke_handler(tauri::generate_handler![
+            reminder_action,
+            hide_main_window,
+            set_focus_mode,
+            set_always_on_top,
+        ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -765,6 +820,8 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_maximizable(false);
+                let always_on_top = read_always_on_top(app.handle());
+                let _ = window.set_always_on_top(always_on_top);
             }
 
             #[cfg(target_os = "macos")]
@@ -785,7 +842,8 @@ pub fn run() {
             }
 
             let focus_mode = read_focus_mode(app.handle());
-            let menu = build_tray_menu(app.handle(), focus_mode)?;
+            let always_on_top = read_always_on_top(app.handle());
+            let menu = build_tray_menu(app.handle(), focus_mode, always_on_top)?;
 
             let _tray = TrayIconBuilder::with_id("litenote-tray")
                 .icon(icon)
@@ -804,6 +862,9 @@ pub fn run() {
                     }
                     "tray_mode_manage" => {
                         let _ = apply_focus_mode(app, false);
+                    }
+                    "tray_always_on_top" => {
+                        let _ = toggle_always_on_top(app);
                     }
                     _ => {}
                 })
@@ -848,6 +909,16 @@ pub fn run() {
                 move |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
                         let _ = toggle_focus_mode(app);
+                    }
+                },
+            )?;
+
+            // 全局快捷键：CmdOrCtrl+Shift+P 切换窗口置顶
+            app.global_shortcut().on_shortcut(
+                "CmdOrCtrl+Shift+P",
+                move |app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = toggle_always_on_top(app);
                     }
                 },
             )?;
