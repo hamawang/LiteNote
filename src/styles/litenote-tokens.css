@@ -69,6 +69,8 @@
   --ln-theme-selected-bg: rgba(255, 255, 255, 0.12);
   --ln-theme-header-border: rgba(255, 255, 255, 0.2);
   --ln-theme-overlay: rgba(0, 0, 0, 0.4);
+  --ln-scrollbar-thumb: rgba(255, 255, 255, 0.28);
+  --ln-scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
 }
 
 /* 深色主题 */
@@ -88,6 +90,8 @@
   --ln-theme-selected-bg: #334155;
   --ln-theme-header-border: #334155;
   --ln-theme-overlay: rgba(0, 0, 0, 0.5);
+  --ln-scrollbar-thumb: rgba(148, 163, 184, 0.45);
+  --ln-scrollbar-thumb-hover: rgba(148, 163, 184, 0.65);
 }
 
 /* 浅色主题 */
@@ -107,4 +111,6 @@
   --ln-theme-selected-bg: #e2e8f0;
   --ln-theme-header-border: #e2e8f0;
   --ln-theme-overlay: rgba(0, 0, 0, 0.1);
+  --ln-scrollbar-thumb: rgba(100, 116, 139, 0.35);
+  --ln-scrollbar-thumb-hover: rgba(100, 116, 139, 0.55);
 }

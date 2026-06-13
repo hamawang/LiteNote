@@ -95,7 +95,7 @@ function CustomSelect<T extends string>({
     const rect = btnRef.current.getBoundingClientRect();
     return {
       position: "fixed",
-      top: rect.bottom + 4,
+      top: rect.bottom + 2,
       left: rect.left,
       width: rect.width,
       zIndex: 60,
@@ -103,24 +103,24 @@ function CustomSelect<T extends string>({
   }, []);
 
   return (
-    <div className="flex items-center justify-between">
-      <span style={{ color: "var(--ln-theme-text)" }} className="text-sm shrink-0 mr-3">
+    <div className="flex items-center justify-between gap-2">
+      <span style={{ color: "var(--ln-theme-text)" }} className="text-xs shrink-0">
         {label}
       </span>
-      <div className="flex-1 max-w-[140px]">
+      <div className="shrink-0 w-[108px]">
         <button
           ref={btnRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm"
+          className="w-full flex items-center justify-between gap-1 px-2 py-1 rounded-md text-xs leading-tight"
           style={{
             background: "var(--ln-theme-surface)",
             color: "var(--ln-theme-text)",
             border: `1px solid var(--ln-theme-border)`,
           }}
         >
-          <span>{curLabel}</span>
-          <svg className="h-3 w-3 shrink-0 ml-1" viewBox="0 0 12 12" fill="none">
+          <span className="truncate">{curLabel}</span>
+          <svg className="h-2.5 w-2.5 shrink-0 opacity-70" viewBox="0 0 12 12" fill="none">
             <path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
@@ -130,7 +130,7 @@ function CustomSelect<T extends string>({
             <div
               ref={listRef}
               style={getPopStyle()}
-              className="rounded-lg overflow-hidden shadow-xl"
+              className="rounded-md overflow-hidden shadow-xl"
             >
               <div
                 style={{
@@ -148,7 +148,7 @@ function CustomSelect<T extends string>({
                       onChange(opt.value);
                       setOpen(false);
                     }}
-                    className="w-full text-left px-2.5 py-1.5 text-sm transition-colors"
+                    className="w-full text-left px-2 py-1 text-xs leading-tight transition-colors"
                     style={{
                       color: "var(--ln-theme-text)",
                       background:
@@ -177,6 +177,78 @@ function CustomSelect<T extends string>({
   );
 }
 
+type SettingsTab = "general" | "shortcuts";
+
+function SettingsTabs({
+  tab,
+  onTabChange,
+  generalLabel,
+  shortcutsLabel,
+}: {
+  tab: SettingsTab;
+  onTabChange: (t: SettingsTab) => void;
+  generalLabel: string;
+  shortcutsLabel: string;
+}) {
+  const btn = (active: boolean) =>
+    `flex flex-1 items-center justify-center rounded px-2 text-[10px] leading-none transition-colors ${
+      active ? "font-medium" : "hover:opacity-90"
+    }`;
+
+  return (
+    <div
+      className="mb-3 flex h-7 gap-0.5 rounded-md p-0.5"
+      style={{ background: "var(--ln-theme-surface)" }}
+      role="tablist"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "general"}
+        className={btn(tab === "general")}
+        style={{
+          color: tab === "general" ? "var(--ln-theme-text)" : "var(--ln-theme-text-secondary)",
+          background: tab === "general" ? "var(--ln-theme-surface-active)" : "transparent",
+        }}
+        onClick={() => onTabChange("general")}
+      >
+        {generalLabel}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "shortcuts"}
+        className={btn(tab === "shortcuts")}
+        style={{
+          color: tab === "shortcuts" ? "var(--ln-theme-text)" : "var(--ln-theme-text-secondary)",
+          background: tab === "shortcuts" ? "var(--ln-theme-surface-active)" : "transparent",
+        }}
+        onClick={() => onTabChange("shortcuts")}
+      >
+        {shortcutsLabel}
+      </button>
+    </div>
+  );
+}
+
+function ShortcutRow({ label, keys }: { label: string; keys: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm" style={{ color: "var(--ln-theme-text)" }}>{label}</span>
+      <kbd
+        className="shrink-0 rounded px-2 py-0.5 text-xs font-mono"
+        style={{
+          color: "var(--ln-theme-text-secondary)",
+          background: "var(--ln-theme-surface)",
+          border: `1px solid var(--ln-theme-border)`,
+        }}
+      >
+        {keys}
+      </kbd>
+    </div>
+  );
+}
+
 export function SettingsModal({
   open,
   locale,
@@ -196,6 +268,7 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const mk = (key: MessageKey) => t(locale, key);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<SettingsTab>("general");
 
   // ESC 关闭
   useEffect(() => {
@@ -207,6 +280,10 @@ export function SettingsModal({
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (open) setTab("general");
+  }, [open]);
+
   if (!open) return null;
 
   return createPortal(
@@ -217,12 +294,12 @@ export function SettingsModal({
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
-        className="w-[320px] max-h-[90%] overflow-y-auto rounded-lg px-5 py-5 shadow-2xl"
+        className="flex w-[320px] max-h-[90vh] flex-col rounded-lg px-5 py-5 shadow-2xl"
         style={{ background: "var(--ln-theme-bg)", backdropFilter: "var(--ln-theme-backdrop)" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* 标题栏 */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold" style={{ color: "var(--ln-theme-text)" }}>
             {mk("settings")}
           </h2>
@@ -238,6 +315,16 @@ export function SettingsModal({
           </button>
         </div>
 
+        <SettingsTabs
+          tab={tab}
+          onTabChange={setTab}
+          generalLabel={mk("settingsTabGeneral")}
+          shortcutsLabel={mk("settingsTabShortcuts")}
+        />
+
+        <div className="min-h-[300px] overflow-y-auto">
+        {tab === "general" ? (
+          <>
         {/* 外观 */}
         <section className="mb-5">
           <div className="flex items-center gap-3">
@@ -308,10 +395,10 @@ export function SettingsModal({
         </section>
 
         {/* 分隔线 */}
-        <div className="mb-5" style={{ borderTop: `1px solid var(--ln-theme-border-light)` }} />
+        <div className="mb-3" style={{ borderTop: `1px solid var(--ln-theme-border-light)` }} />
 
         {/* 提醒方式 */}
-        <section className="mb-4">
+        <section className="mb-3">
           <CustomSelect
             label={mk("reminderModeLabel")}
             value={reminderMode}
@@ -322,10 +409,10 @@ export function SettingsModal({
             ]}
           />
         </section>
-        <div className="mb-5" style={{ borderTop: `1px solid var(--ln-theme-border-light)` }} />
+        <div className="mb-3" style={{ borderTop: `1px solid var(--ln-theme-border-light)` }} />
 
         {/* 主题 */}
-        <section className="mb-4">
+        <section className="mb-3">
           <CustomSelect
             label={mk("themeLabel")}
             value={theme}
@@ -351,24 +438,29 @@ export function SettingsModal({
             ]}
           />
         </section>
-
-        {/* 分隔线 */}
-        <div className="my-5" style={{ borderTop: `1px solid var(--ln-theme-border-light)` }} />
-
-        {/* 快捷键（只读） */}
-        <section>
-          <div className="flex items-center justify-between">
-            <span className="text-sm" style={{ color: "var(--ln-theme-text)" }}>
-              {mk("shortcutLabel")}
-            </span>
-            <span className="text-sm" style={{ color: "var(--ln-theme-text-muted)" }}>
-              {mk("shortcutValue")}
-            </span>
-          </div>
-          <p className="text-xs mt-1" style={{ color: "var(--ln-theme-text-muted)" }}>
-            {locale === "zh-CN" ? "全局显示 / 隐藏窗口" : "Show / hide window globally"}
-          </p>
-        </section>
+          </>
+        ) : (
+          <section className="space-y-4">
+            <ShortcutRow
+              label={mk("shortcutHideWindow")}
+              keys={mk("shortcutKeysToggleWindow")}
+            />
+            <ShortcutRow
+              label={mk("shortcutFocusMode")}
+              keys={mk("shortcutKeysToggleFocus")}
+            />
+            <ShortcutRow
+              label={mk("shortcutPin")}
+              keys={mk("shortcutKeysTogglePin")}
+            />
+            <p className="text-xs pt-1" style={{ color: "var(--ln-theme-text-muted)" }}>
+              {locale === "zh-CN"
+                ? "全局快捷键，窗口隐藏时也可使用。"
+                : "Global shortcuts work even when the window is hidden."}
+            </p>
+          </section>
+        )}
+        </div>
       </div>
     </div>,
     document.body,
