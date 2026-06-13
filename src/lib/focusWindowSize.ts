@@ -26,7 +26,50 @@ export const FOCUS_MAX_HEIGHT = FOCUS_DRAG_HANDLE_HEIGHT + FOCUS_MAX_LIST_HEIGHT
 export const DEFAULT_FULL_WINDOW_WIDTH = 360;
 export const DEFAULT_FULL_WINDOW_HEIGHT = 620;
 
+/** 完整模式合理上限（用于修复 Retina 下误存物理像素导致的膨胀） */
+export const FULL_SIZE_MAX_WIDTH = DEFAULT_FULL_WINDOW_WIDTH * 2;
+export const FULL_SIZE_MAX_HEIGHT = DEFAULT_FULL_WINDOW_HEIGHT * 2;
+
 export type WindowLogicalSize = { width: number; height: number };
+
+/** 完整模式窗口高度下限（低于此视为专注模式尺寸，不可写入 fullWindow*） */
+export function isLikelyFullModeSize(size: WindowLogicalSize): boolean {
+  return size.height > FOCUS_MAX_HEIGHT + 24;
+}
+
+/** 从 settings 解析完整模式尺寸，过滤专注模式高度与异常膨胀值 */
+export function resolveStoredFullSize(
+  width: number | undefined,
+  height: number | undefined,
+): WindowLogicalSize {
+  const full = {
+    width: width ?? DEFAULT_FULL_WINDOW_WIDTH,
+    height: height ?? DEFAULT_FULL_WINDOW_HEIGHT,
+  };
+  if (!isLikelyFullModeSize(full)) {
+    return {
+      width: DEFAULT_FULL_WINDOW_WIDTH,
+      height: DEFAULT_FULL_WINDOW_HEIGHT,
+    };
+  }
+  if (
+    full.width > FULL_SIZE_MAX_WIDTH ||
+    full.height > FULL_SIZE_MAX_HEIGHT
+  ) {
+    return {
+      width: DEFAULT_FULL_WINDOW_WIDTH,
+      height: DEFAULT_FULL_WINDOW_HEIGHT,
+    };
+  }
+  return full;
+}
+
+export function isOversizedFullSize(size: WindowLogicalSize): boolean {
+  return (
+    isLikelyFullModeSize(size) &&
+    (size.width > FULL_SIZE_MAX_WIDTH || size.height > FULL_SIZE_MAX_HEIGHT)
+  );
+}
 
 export function computeFocusWindowHeight(activeCount: number): number {
   if (activeCount <= 0) return FOCUS_EMPTY_HEIGHT;
@@ -37,8 +80,13 @@ export function computeFocusWindowHeight(activeCount: number): number {
 
 export async function readWindowInnerSize(): Promise<WindowLogicalSize | null> {
   try {
-    const size = await getCurrentWindow().innerSize();
-    return { width: size.width, height: size.height };
+    const window = getCurrentWindow();
+    const [physical, scaleFactor] = await Promise.all([
+      window.innerSize(),
+      window.scaleFactor(),
+    ]);
+    const logical = physical.toLogical(scaleFactor);
+    return { width: logical.width, height: logical.height };
   } catch {
     return null;
   }
